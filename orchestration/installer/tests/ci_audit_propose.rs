@@ -51,6 +51,47 @@ fn repo(workflow: &str) -> tempfile::TempDir {
     dir
 }
 
+/// The lock of an install with `security`, whose `diff-coverage` judges the
+/// uploaded data, and `modules` beside it.
+fn installed(dir: &Path, modules: &[&str]) {
+    let modules: serde_json::Map<String, serde_json::Value> = modules
+        .iter()
+        .chain(&["security"])
+        .map(|m| {
+            (
+                (*m).to_owned(),
+                serde_json::json!({"version": "1.0.0", "answers_digest": null}),
+            )
+        })
+        .collect();
+    fs::write(
+        dir.join(".agent-setup/lock.json"),
+        serde_json::json!({"schema": 2, "modules": modules, "files": {}}).to_string(),
+    )
+    .unwrap();
+}
+
+/// `repo`'s profile with `commands` (name, value) replaced.
+fn declare(dir: &Path, commands: &[(&str, Option<&str>)]) {
+    let path = dir.join(".agent-setup/project.json");
+    let mut profile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    for (name, value) in commands {
+        profile["commands"][*name] = serde_json::json!(value);
+    }
+    fs::write(&path, profile.to_string()).unwrap();
+}
+
+/// A seed `ci-baseline` renders (`templates/ci-baseline/goldens/seed/`).
+fn seed(name: &str) -> String {
+    fs::read_to_string(
+        manifest()
+            .join("../../templates/ci-baseline/goldens/seed")
+            .join(name),
+    )
+    .unwrap()
+}
+
 fn golden(name: &str, text: &str) {
     let path = manifest().join(GOLDENS).join(name);
     if std::env::var_os("UPDATE_GOLDENS").is_some() {
@@ -69,6 +110,88 @@ fn summary(found: &[Proposal]) -> Vec<String> {
         .collect()
 }
 
+/// Acceptance criterion 1 of #19: on a freshly seeded repository the audit has
+/// nothing to say. The seed reads each command at run time (`.commands[$name]`
+/// with `NAME` in the step's env), runs `test` or else `verify`, and, for
+/// python-uv, the pack's measured pytest in place of the declared test.
+#[test]
+fn a_freshly_rendered_seed_has_nothing_to_propose() {
+    // Each golden with the build its render declared: the python-uv seed has no build job.
+    for (file, stack, security, build) in [
+        ("seed-rust-security.yml", "rust", true, Some("cargo build")),
+        ("seed-rust.yml", "rust", false, Some("cargo build")),
+        ("seed-python-uv-security.yml", "python-uv", true, None),
+    ] {
+        let dir = repo(&seed(file));
+        fs::write(
+            dir.path().join(".agent-setup/modules/stack-packs.json"),
+            format!(
+                r#"{{"module": "stack-packs", "version": "1.0.0", "answers": {{"apps.root.path": ".", "apps.root.stack": "{stack}", "apps.root.container": false}}}}"#
+            ),
+        )
+        .unwrap();
+        declare(
+            dir.path(),
+            &[
+                ("verify", Some("cargo test --locked")),
+                ("test", Some("cargo test --locked")),
+                ("build", build),
+            ],
+        );
+        if security {
+            installed(dir.path(), &["ci-baseline", "stack-packs"]);
+        }
+        assert_eq!(
+            summary(&proposals(dir.path())),
+            Vec::<String>::new(),
+            "{file}"
+        );
+    }
+}
+
+#[test]
+fn verify_needs_a_job_only_when_test_is_not_declared() {
+    // ci-baseline's own selection: lint; test, or verify when test is null; build.
+    let dir = repo(&fixture("clean"));
+    declare(dir.path(), &[("verify", Some("make verify"))]);
+    assert_eq!(summary(&proposals(dir.path())), Vec::<String>::new());
+    declare(dir.path(), &[("test", None)]);
+    assert_eq!(
+        summary(&proposals(dir.path())),
+        [
+            "ci.command-missing .github/workflows/ci.yml: commands.verify is declared and no job of the project's CI runs it"
+        ]
+    );
+}
+
+#[test]
+fn a_hard_coded_ci_still_needs_each_selected_command_literally() {
+    // Reading `.commands[...]` counts only for the command the step's env names.
+    let ci = fixture("missing-build-job").replace(
+        "      - name: Lint\n        run: cargo clippy --all-targets\n",
+        "      - name: Lint\n        env:\n          NAME: lint\n        run: cmd=\"$(jq -r --arg name \"$NAME\" '.commands[$name]' .agent-setup/project.json)\" && bash -c \"$cmd\"\n",
+    );
+    let dir = repo(&ci);
+    assert_eq!(
+        summary(&proposals(dir.path())),
+        [
+            "ci.command-missing .github/workflows/ci.yml: commands.build is declared and no job of the project's CI runs it"
+        ]
+    );
+}
+
+#[test]
+fn without_security_no_upload_is_asked_for() {
+    // Nothing judges coverage without `security`: the seed then uploads none.
+    let dir = repo(&fixture("no-coverage-upload"));
+    fs::write(
+        dir.path().join(".agent-setup/lock.json"),
+        "{\"schema\": 2, \"modules\": {}, \"files\": {}}",
+    )
+    .unwrap();
+    assert_eq!(summary(&proposals(dir.path())), Vec::<String>::new());
+}
+
 #[test]
 fn a_clean_ci_has_nothing_to_propose() {
     let dir = repo(&fixture("clean"));
@@ -79,6 +202,7 @@ fn a_clean_ci_has_nothing_to_propose() {
 /// once the patch is applied.
 fn defect(name: &str, rule: &str, text: &str) {
     let dir = repo(&fixture(name));
+    installed(dir.path(), &[]);
     let found = proposals(dir.path());
     assert_eq!(
         summary(&found),
@@ -217,6 +341,7 @@ fn a_workflow_brakes_manages_is_not_the_projects_ci() {
 #[test]
 fn a_pack_without_coverage_is_exempt_and_says_why() {
     let dir = repo(&fixture("no-coverage-upload"));
+    installed(dir.path(), &[]);
     fs::write(
         dir.path().join(".agent-setup/modules/stack-packs.json"),
         r#"{"module": "stack-packs", "version": "1.0.0", "answers": {"apps.root.path": ".", "apps.root.stack": "go", "apps.root.container": false}}"#,

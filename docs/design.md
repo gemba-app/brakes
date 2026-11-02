@@ -732,9 +732,12 @@ other is named without a patch), `ci.pull-request-target-head` (a checkout of th
 request's head under `pull_request_target`: the `ref:` goes), `ci.untrusted-interpolation`
 (an author-chosen `github.event.*` value in `run:`, moved to the step's `env:`),
 `ci.pull-request-trigger` (no project workflow runs on pull requests: `pull_request`
-added to `on:`), `ci.command-missing` (a declared `lint`, `test`, `build` or `verify` no
-step runs, read as its text or as `commands.<name>`; `verify` counts as run when `test`
-is: a job appended with checkout, the app's pack setup and the command) and
+added to `on:`), `ci.command-missing` (a command of ci-baseline's selection, `lint`, `test` or else
+`verify`, and `build`, that no step runs: a step runs it when its `run:` holds the
+command as declared, names `commands.<name>`, reads `.commands[…]` at run time with the
+name in its `env:` as the seed does, or, for `test`, runs a pack's measured run that
+takes its place; a job appended with checkout, the app's pack setup and the command)
+and, where `security` is installed (its `diff-coverage` is what judges the data),
 `ci.coverage-upload` (a recorded app whose pack has a coverage recipe and whose
 `agentic-coverage-<app id>-<job>` no step uploads: the step that runs its test command
 replaced by the pack's measured run and upload; an app whose pack has none is named as

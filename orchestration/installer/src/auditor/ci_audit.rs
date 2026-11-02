@@ -14,7 +14,7 @@
 use crate::{
     LOCK, PROFILE,
     auditor::workflows::{self, Workflow},
-    modules::stack_packs::{self, App, PinTable, Step, packs::pack, steps_yaml},
+    modules::stack_packs::{self, App, Measure, PinTable, Step, packs::pack, steps_yaml},
 };
 use serde_json::Value;
 use std::{collections::BTreeMap, fmt::Write as _, path::Path};
@@ -23,8 +23,6 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path};
 pub const TIMEOUT_MINUTES: u32 = 15;
 /// The label a proposed job runs on: GitHub-hosted, never a configured runner.
 const RUNNER: &str = "ubuntu-24.04";
-/// The declared commands a project's CI must run.
-pub const COMMANDS: [&str; 4] = ["lint", "test", "build", "verify"];
 const WORKFLOWS_DIR: &str = ".github/workflows";
 /// Text a workflow must not interpolate into `run:`: values a pull request's
 /// author, or a commenter, chooses.
@@ -94,7 +92,10 @@ pub fn proposals(root: &Path) -> Vec<Proposal> {
     pull_request_trigger(&files, &mut out);
     let apps = apps(root);
     command_missing(&files, &profile, &apps, pins.as_ref(), &mut out);
-    coverage_upload(root, &files, &profile, &apps, pins.as_ref(), &mut out);
+    // Only `security`'s diff-coverage judges the upload; without it the seed has none.
+    if read_json(root, LOCK)["modules"]["security"].is_object() {
+        coverage_upload(root, &files, &profile, &apps, pins.as_ref(), &mut out);
+    }
     out
 }
 
@@ -393,17 +394,58 @@ fn ci_file(files: &[File]) -> &File {
         .unwrap_or(&files[0])
 }
 
-fn runs(files: &[File], name: &str, command: &str) -> bool {
+/// A step runs `commands.<name>` when its `run:` holds the command as declared,
+/// names `commands.<name>`, or reads `.commands[…]` from the profile at run time
+/// with `name` as a value of its `env:` (the seed's and the generated jobs'
+/// form). `measured` are the runs a pack takes in place of the declared test
+/// (`Measure::Instead`): they run `test`.
+fn runs(files: &[File], name: &str, command: &str, measured: &[String]) -> bool {
     let reads = format!("commands.{name}");
     files.iter().any(|f| {
         f.wf.jobs.iter().any(|j| {
             j.steps.iter().any(|s| {
-                s.run
-                    .as_deref()
-                    .is_some_and(|r| r.contains(command.trim()) || r.contains(&reads))
+                s.run.as_deref().is_some_and(|r| {
+                    r.contains(command.trim())
+                        || r.contains(&reads)
+                        || (r.contains(".commands[") && s.env.values().any(|v| v == name))
+                        || (name == "test" && measured.iter().any(|m| r.contains(m.as_str())))
+                })
             })
         })
     })
+}
+
+/// The runs that take the declared test's place for `apps` (`Measure::Instead`),
+/// as `upload_steps` renders them.
+fn measured_runs(apps: &[App], pins: Option<&PinTable>) -> Vec<String> {
+    let Some(pins) = pins else {
+        return Vec::new();
+    };
+    apps.iter()
+        .filter_map(|app| {
+            let recipe = pack(app.stack).coverage?;
+            matches!(recipe.upload.measure, Measure::Instead(_)).then_some(())?;
+            let steps = recipe.upload_steps(app, "test", "", pins, None).ok()?;
+            steps.into_iter().find_map(|s| s.run)
+        })
+        .collect()
+}
+
+/// The commands a project's CI must run, as ci-baseline selects them: `lint`;
+/// `test`, or `verify` when `test` is not declared; `build`. Each with its text.
+fn selected(profile: &Value) -> Vec<(&'static str, String)> {
+    let declared = |name: &str| profile["commands"][name].as_str().map(str::to_owned);
+    let check = declared("test")
+        .map(|t| ("test", t))
+        .or_else(|| declared("verify").map(|v| ("verify", v)));
+    [
+        declared("lint").map(|c| ("lint", c)),
+        check,
+        declared("build").map(|c| ("build", c)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// The recorded apps as `App`s, without macOS targets (no Linux job runs them).
@@ -441,16 +483,9 @@ fn command_missing(
     pins: Option<&PinTable>,
     out: &mut Vec<Proposal>,
 ) {
-    let declared = |name: &str| profile["commands"][name].as_str().map(str::to_owned);
-    for name in COMMANDS {
-        let Some(command) = declared(name) else {
-            continue;
-        };
-        if runs(files, name, &command) {
-            continue;
-        }
-        // `verify` usually chains the others; a CI that runs the declared test runs it.
-        if name == "verify" && declared("test").is_some_and(|t| runs(files, "test", &t)) {
+    let measured = measured_runs(apps, pins);
+    for (name, command) in selected(profile) {
+        if runs(files, name, &command, &measured) {
             continue;
         }
         let file = ci_file(files);
