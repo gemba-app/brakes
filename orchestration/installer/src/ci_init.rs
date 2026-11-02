@@ -130,13 +130,13 @@ fn apps(root: &Path, recorded: &Answers, asker: &mut Asker<'_>) -> Result<Vec<Pr
     let mut kept: Vec<Proposal> = Vec::new();
     for proposal in detection.proposals {
         if !proposal.recorded {
-            if let Some(other) = kept.iter().find(|k| k.path == proposal.path) {
-                if matches!(asker, Asker::NoInput) {
-                    return refuse(format!(
-                        "ci init: several stacks at `{}` ({}, {}); record one with `brakes configure . stack-packs`",
-                        proposal.path, other.stack, proposal.stack
-                    ));
-                }
+            if let Some(other) = kept.iter().find(|k| k.path == proposal.path)
+                && matches!(asker, Asker::NoInput)
+            {
+                return refuse(format!(
+                    "ci init: several stacks at `{}` ({}, {}); record one with `brakes configure . stack-packs`",
+                    proposal.path, other.stack, proposal.stack
+                ));
             }
             let prompt = format!(
                 "Record app {} ({} at {})? [Y/n] ",
