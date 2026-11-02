@@ -59,12 +59,9 @@ make: *** [test] Error 1
 
 ## Requirements
 
-- **Rust 1.99 or later** and Cargo, to build from source. Or, instead of building, a
-  prebuilt binary: each release attaches `brakes-<tag>-<target>.tar.gz` for
-  `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` and `aarch64-apple-darwin`,
-  with `SHA256SUMS` and a build-provenance attestation. Check the download before you
-  run it, with `sha256sum -c SHA256SUMS --ignore-missing` and
-  `gh attestation verify brakes-<tag>-<target>.tar.gz --repo gemba-app/brakes`.
+- **A prebuilt binary** for Linux (x86_64, aarch64) or macOS (aarch64), checked against
+  `SHA256SUMS` and its attestation (see Install), or **Rust 1.99 or later** to build from
+  source.
 - **GitHub only.** The host adapter reads and writes GitHub (`github.com`); other hosts
   are not supported.
 - **The GitHub CLI, `gh`, signed in**, for everything that reads or writes the remote
@@ -81,8 +78,26 @@ make: *** [test] Error 1
 
 ## Install
 
+Each release attaches a binary for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+and `aarch64-apple-darwin`, a `SHA256SUMS` file and a build-provenance attestation. With
+the GitHub CLI (`gh`):
+
 ```sh
-cargo install --locked --git https://github.com/gemba-app/brakes
+V=v0.5.2 T=aarch64-apple-darwin   # or x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
+gh release download "$V" -R gemba-app/brakes -p "brakes-$V-$T.tar.gz" -p SHA256SUMS
+shasum -a 256 --ignore-missing -c SHA256SUMS   # prints "brakes-…tar.gz: OK"
+gh attestation verify "brakes-$V-$T.tar.gz" -R gemba-app/brakes
+tar -xzf "brakes-$V-$T.tar.gz"
+install -m 0755 brakes ~/.local/bin/brakes     # any directory on your PATH
+brakes --version
+```
+
+`gh attestation verify` exits 0 only when the archive was built by this repository's
+release workflow; a modified archive fails. On another platform, build from source with
+Rust 1.99 or later:
+
+```sh
+cargo install --locked --git https://github.com/gemba-app/brakes --tag v0.5.2
 ```
 
 Without a configuration `brakes` diagnoses and plans but refuses every write; the next
