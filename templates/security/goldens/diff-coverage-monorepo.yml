@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Check out
         if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)))
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: "0"
           persist-credentials: "false"
@@ -149,7 +149,7 @@ jobs:
           path: ".coverage-base"
       - name: Download the coverage of api
         if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && steps.bypass.outputs.id == ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: ".coverage-parts/api"
           pattern: "agentic-coverage-api-*"
@@ -179,7 +179,7 @@ jobs:
           find "$GITHUB_WORKSPACE/.coverage-parts/api" -type f -name '*.info' | sort | xargs awk -F'[:,]' '/^SF:/ { f = substr($0, 4); if (!(f in seen)) { seen[f] = 1; order[++n] = f }; next } /^DA:/ && f != "" { k = f SUBSEP $2; if (!(k in hits)) { hits[k] = 0; lines[f] = lines[f] $2 " " }; if ($3 + 0 > hits[k]) hits[k] = $3 + 0; next } END { for (i = 1; i <= n; i++) { f = order[i]; print "SF:" f; m = split(lines[f], l, " "); for (j = 1; j <= m; j++) if (l[j] != "") print "DA:" l[j] "," hits[f SUBSEP l[j]]; print "end_of_record" } }' > lcov.info
       - name: Download the coverage of web
         if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && steps.bypass.outputs.id == ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: ".coverage-parts/web"
           pattern: "agentic-coverage-web-*"

@@ -26,7 +26,7 @@ jobs:
       protected: "${{ steps.scope.outputs.protected }}"
     steps:
       - name: Check out
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: "0"
           persist-credentials: "false"
@@ -203,7 +203,7 @@ jobs:
     timeout-minutes: 18
     steps:
       - name: Check out
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: "false"
       - name: Install Rust toolchain
@@ -217,7 +217,7 @@ jobs:
           save-if: "${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}"
           workspaces: "."
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: "nextest@0.9.150"
       - name: Run declared lint
@@ -262,7 +262,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - name: Check out
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: "false"
       - name: Install Rust toolchain
@@ -276,7 +276,7 @@ jobs:
           save-if: "${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}"
           workspaces: "."
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: "nextest@0.9.150"
       - name: Run declared shard
@@ -305,7 +305,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: "false"
       - name: Check held-out tests are pending
@@ -334,7 +334,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: "false"
       - name: Install actionlint
