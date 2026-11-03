@@ -550,13 +550,56 @@ fn the_default_protected_paths_follow_the_answer_table() {
     assert_eq!(
         DEFAULT_PROTECTED_PATHS,
         [
-            ".github/workflows/**",
             ".github/rulesets/**",
             ".github/CODEOWNERS",
-            ".agent-setup/lock.json",
+            ".github/workflows/ci.yml",
+            ".github/workflows/agentic-*.yml",
+            ".github/workflows/*release*",
+            ".github/workflows/*deploy*",
+            ".github/workflows/*publish*",
             "tests/heldout/**",
         ]
     );
+}
+
+#[test]
+/// Decision 2026-11-03 "Only a critical change waits for a person": the lock and
+/// a workflow that neither judges nor publishes merge on green.
+fn the_lock_and_a_workflow_that_neither_judges_nor_publishes_are_not_protected() {
+    let repo = Repo::with_base(BASE);
+    let base = repo.head();
+    let head = repo.commit(
+        &[
+            (".agent-setup/lock.json", "{}\n"),
+            (".github/workflows/workflow-lint.yml", "name: L\n"),
+            (".github/workflows/nested/x.yml", "name: X\n"),
+        ],
+        &[],
+        "routine",
+    );
+    let run = scope(&repo, pr(&base, &head));
+    assert_eq!(run.protected(), Vec::<String>::new());
+    assert_eq!(run.tier(), TIER_FULL);
+}
+
+#[test]
+/// Decision 2026-11-03: the workflows that produce the required checks and those
+/// that release, deploy or publish stay critical.
+fn a_workflow_that_judges_or_publishes_is_protected() {
+    for path in [
+        ".github/workflows/ci.yml",
+        ".github/workflows/agentic-security.yml",
+        ".github/workflows/agentic-coverage.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/deploy-prod.yml",
+        ".github/workflows/npm-publish.yaml",
+    ] {
+        let repo = Repo::with_base(BASE);
+        let base = repo.head();
+        let head = repo.commit(&[(path, "changed\n")], &[], "one");
+        let run = scope(&repo, pr(&base, &head));
+        assert_eq!(run.protected(), [path], "{path}");
+    }
 }
 
 #[test]
@@ -582,18 +625,16 @@ fn every_protected_change_is_listed_in_diff_order() {
     assert_eq!(
         run.protected(),
         [
-            ".agent-setup/lock.json",
             ".github/CODEOWNERS",
             ".github/rulesets/main.json",
             ".github/workflows/ci.yml",
-            ".github/workflows/nested/x.yml",
             "tests/heldout/test_gate.py",
         ]
     );
     assert_eq!(run.tier(), TIER_FULL);
     assert!(
         run.stdout.contains(
-            "protected=[\".agent-setup/lock.json\",\".github/CODEOWNERS\",\".github/rulesets/main.json\",\".github/workflows/ci.yml\",\".github/workflows/nested/x.yml\",\"tests/heldout/test_gate.py\"]\n"
+            "protected=[\".github/CODEOWNERS\",\".github/rulesets/main.json\",\".github/workflows/ci.yml\",\"tests/heldout/test_gate.py\"]\n"
         ),
         "{}",
         run.stdout
@@ -606,7 +647,6 @@ fn each_protected_kind_is_listed_alone() {
         ".github/workflows/ci.yml",
         ".github/rulesets/main.json",
         ".github/CODEOWNERS",
-        ".agent-setup/lock.json",
         "tests/heldout/test_gate.py",
     ] {
         let repo = Repo::with_base(BASE);
@@ -683,13 +723,14 @@ fn no_merge_base_means_the_files_cannot_be_listed() {
 }
 
 #[test]
-fn a_docs_only_change_under_workflows_is_full_and_protected() {
+/// Never inert, and not critical since decision 2026-11-03.
+fn a_docs_only_change_under_workflows_is_full_and_not_protected() {
     let repo = Repo::with_base(BASE);
     let base = repo.head();
     let head = repo.commit(&[(".github/workflows/README.md", "docs\n")], &[], "wf-md");
     let run = scope(&repo, pr(&base, &head));
     assert_eq!(run.tier(), TIER_FULL);
-    assert_eq!(run.protected(), [".github/workflows/README.md"]);
+    assert_eq!(run.protected(), Vec::<String>::new());
 }
 
 #[test]

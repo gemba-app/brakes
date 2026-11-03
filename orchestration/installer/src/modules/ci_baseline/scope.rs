@@ -57,11 +57,18 @@ pub const DEFAULT_HELDOUT_DIR: &str = "tests/heldout";
 /// `model.rs` appends its screenshot baselines to the unanswered default
 /// (`<web_dir>/*-snapshots/**`, `**/*-snapshots/**` at the root, one per app;
 /// `qa::protected`, #1005).
+/// Only a critical change waits for a person (decision 2026-11-03): the
+/// ruleset, the owners, the workflows that produce the required checks or that
+/// release, deploy or publish, and the held-out tests. The lock and any other
+/// workflow merge on green.
 pub const DEFAULT_PROTECTED_PATHS: &[&str] = &[
-    ".github/workflows/**",
     ".github/rulesets/**",
     ".github/CODEOWNERS",
-    ".agent-setup/lock.json",
+    ".github/workflows/ci.yml",
+    ".github/workflows/agentic-*.yml",
+    ".github/workflows/*release*",
+    ".github/workflows/*deploy*",
+    ".github/workflows/*publish*",
     "tests/heldout/**",
 ];
 

@@ -420,11 +420,10 @@ The required level is P1 Bronze, P2 Silver, P3 Gold; `customers` raises it to at
 least Silver and `personal-data-or-payments` one level, capped at Gold; an undeclared
 criticality is audited as `internal` with a Basic finding. When the humans measure is
 unavailable, as it always is without `--remote`, the profile is P1 flagged
-`unverified` and the required level is still stated. When it counts exactly one human,
-`posture.human-approval-required` and `posture.codeowners-review` are `not-required`
-with the reason `single maintainer: nobody else can approve`, without being evaluated:
-GitHub does not let a pull request's author approve it, so that maintainer's merge gate
-is the required checks and `human-approved` on protected paths.
+`unverified` and the required level is still stated. No rule asks for an approving
+review on every pull request (decision "Only a critical change waits for a person"): in
+every profile the merge gate is the required checks, and `human-approved` on a change
+to a protected path.
 
 **The project profile fields** the auditor reads from `.agent-setup/project.json`,
 all optional, refused when malformed with a sentence naming what is allowed:
@@ -812,7 +811,7 @@ as written, so its comments and layout stay. `doctor` prints one line with the c
 `doctor --propose` prints every finding as `PROPOSE <rule> <file>: <text>` with its
 unified diff (`--json --propose` adds `proposals`), then states that nothing was
 written. Nothing in the module writes: a patch reaches the default branch through a
-pull request labelled `human-approved`, since workflows are a protected path. The
+pull request, labelled `human-approved` when the workflow is a protected path. The
 proposals never change readiness, a level or the exit code: the ids the catalogue
 already holds are judged, as before, from `doctor`'s own `WARNING` lines, and the new
 ones (`ci.concurrency`, `ci.pull-request-target-head`, `ci.untrusted-interpolation`,

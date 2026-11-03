@@ -113,8 +113,10 @@ impl Answers {
                 codeowners: false,
                 bypass_actors: Vec::new(),
             },
+            // Decision 2026-11-03: green merges in every profile; a team that
+            // wants a review on every pull request answers `one-approval`.
             Tier::P2 | Tier::P3 => Answers {
-                approvals: Approvals::OneApproval,
+                approvals: Approvals::ChecksOnly,
                 codeowners: true,
                 bypass_actors: Vec::new(),
             },

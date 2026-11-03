@@ -835,8 +835,6 @@ const ALLOCATION: &[(&str, Level, &str)] = &[
     ("ci-health.workflow-exists", Level::Basic, "all"),
     ("posture.required-check-enforced", Level::Bronze, "all"),
     ("posture.no-unlisted-bypass-actors", Level::Bronze, "all"),
-    ("posture.human-approval-required", Level::Bronze, "P2, P3"),
-    ("posture.codeowners-review", Level::Bronze, "P2, P3"),
     ("posture.serialised-merges", Level::Bronze, "cadence >= mid"),
     ("posture.actions-pinned", Level::Bronze, "all"),
     ("posture.no-stale-critical-alerts", Level::Bronze, "all"),

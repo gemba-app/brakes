@@ -4,6 +4,39 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## Only a critical change waits for a person; every other pull request merges on green — 2026-11-03
+
+Decided by the owner. Context: with the label on every workflow, the lock and every action
+bump, and one approval on every pull request in P2 and P3, a person was asked to approve
+changes the tool itself generated: SHA bumps, a regenerated lock, a release. In a repository
+with one maintainer nobody can give that approval, and the merge stops. What a person must see
+is a change to the rules that judge the change or to what publishes it, not every pull request.
+
+1. **Green merges, in every profile.** A pull request whose required checks are green may merge,
+   by a person or by an agent, without a person's approval. The ruleset's default is
+   `checks-only` (0 approvals) in P1, P2 and P3. A team that wants a review on every pull
+   request answers `one-approval`, as the two team presets do; the auditor no longer requires
+   one (`posture.human-approval-required` and `posture.codeowners-review` are required for no
+   profile).
+2. **Critical is what judges or publishes.** The default `protected_paths` are the ruleset
+   (`.github/rulesets/**`), `.github/CODEOWNERS`, the workflows that produce the required checks
+   (`.github/workflows/ci.yml` and the `.github/workflows/agentic-*.yml` the tool renders), the
+   workflows whose name says they release, deploy or publish (`*release*`, `*deploy*`,
+   `*publish*` under `.github/workflows/`) and `<heldout_dir>/**`. A repository whose required
+   checks come from another workflow adds it to its answer.
+3. **Not critical any more:** `.agent-setup/lock.json` (the tool writes it, and agents stay
+   denied hand edits to it), and any other workflow. A change to them merges on green.
+4. **A critical change still needs the `human-approved` label**, last added by a person; in a
+   team any person may add it. The merge guard, the label rules and "never merge on red" are
+   unchanged.
+5. **Supersedes** point 6 of "Engine, CI baseline, security gates and agent guardrails" (one
+   approval in P2 and P3), the default list of its point 4, and "A single maintainer is not
+   asked for an approval nobody can give": `posture.human-approval-required` and
+   `posture.codeowners-review` are removed from the catalogue, so no rule asks for a review.
+6. **An action bump is routine** (follow-up pull request): a change to a critical workflow that
+   only replaces the commit SHA of a pinned action, each new SHA being the commit of the tag its
+   comment names in the action's own repository, passes without the label.
+
 ## The person's `human-approved` route stays denied until a real session proves the prompt; the hook is a brake — 2026-11-03
 
 Context (#28): the guard was built to route one canonical command,
