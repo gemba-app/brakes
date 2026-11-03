@@ -640,14 +640,21 @@ fn the_rendered_guide_states_the_canonical_approval_is_denied_until_proven() {
         .find(|l| l.starts_with("| `human-approved` is set only by a person |"))
         .expect("the human-approved row");
     assert!(!row.contains("puts to you"), "{row}");
+    // A brake over what it can read, never "every route" (#28 review).
+    assert!(!row.contains("every route"), "{row}");
+    assert!(row.contains("a brake and not a barrier"), "{row}");
     assert!(
         row.contains(
-            "the merge-guard hook denies every route, `gh pr edit <n> [--repo <owner>/<repo>] --add-label human-approved` included"
+            "`gh pr edit <n> [--repo <owner>/<repo>] --add-label human-approved` included"
         ),
         "{row}"
     );
     assert!(
-        row.contains("set it on GitHub under your own login"),
+        row.contains("a session on your own token counts as you"),
+        "{row}"
+    );
+    assert!(
+        row.contains("set the label on GitHub under your own login"),
         "{row}"
     );
 }

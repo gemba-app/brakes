@@ -4,7 +4,7 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
-## The person's `human-approved` route stays denied until a real session proves the prompt — 2026-11-03
+## The person's `human-approved` route stays denied until a real session proves the prompt; the hook is a brake — 2026-11-03
 
 Context (#28): the guard was built to route one canonical command,
 `gh pr edit <n> [--repo <owner>/<repo>] --add-label human-approved`, to the person through
@@ -20,31 +20,53 @@ the command, it executed, and the person saw no prompt. Three facts contributed:
 
 Which of them, or which combination, let the command through has not been established.
 
-1. **Fail safe.** The guard denies the canonical form like every other route that sets the label
-   (`PROMPT_EVIDENCE` is `None`). The POSIX fallback denies it as well. The person sets the label
-   on GitHub under their own login.
-2. **`ask` only behind evidence and only where nothing answers for the person.** The route
-   reopens only when a real interactive session, recorded in `PROMPT_EVIDENCE`, has shown the
-   person the prompt. Even then the guard returns `ask` only when every one of these holds:
-   - the hook runs under Claude Code (`CLAUDE_PROJECT_DIR` absolute), outside CI;
-   - the session runs on a person's token, not the agents' App;
-   - the project's settings carry the exact rule;
-   - no layer it can read may answer the prompt: a `bypassPermissions` mode in the payload, or a
-     managed, user, project or local settings file with `PermissionRequest` hooks,
-     `skipDangerousModePermissionPrompt: true` or `defaultMode: bypassPermissions`, or that
-     cannot be read.
+1. **Fail safe.** The guard denies the canonical form as it denies every other command it can read
+   that sets the label (`PROMPT_EVIDENCE` is `None`). The POSIX fallback denies it as well. The
+   person sets the label on GitHub under their own login.
+2. **A brake, not a barrier.** The hook reads one Bash command line. A command it cannot read, a
+   tool other than Bash or a change to the hook itself is not stopped by it. The barrier is
+   `required`, which counts the label only when its last `labeled` event is a person's. A session
+   on a person's token counts as that person, so agent sessions run on the agents' App token, whose
+   label never counts. Gaps the hook could close are fixed as their own issues, each with a failing
+   test.
+3. **`ask` only behind evidence and only where nothing answers for the person.** The route
+   reopens only when a real interactive session, recorded in `PROMPT_EVIDENCE` with the host's
+   version, has shown the person the prompt. Even then the guard returns `ask` only when every one
+   of these holds, and denies otherwise:
+   - the hook runs under Claude Code (`CLAUDE_PROJECT_DIR` absolute), with neither `CI` nor
+     `GITHUB_ACTIONS` set;
+   - neither `GH_TOKEN` nor `GITHUB_TOKEN` is an App installation token (`ghs_`);
+   - the project's `.claude/settings.json` carries the exact rule;
+   - no layer it reads may answer the prompt: `permission_mode` `bypassPermissions` in the payload,
+     or one of the managed settings files at the macOS and Linux paths, the user, project or local
+     settings, which has `PermissionRequest` hooks, `skipDangerousModePermissionPrompt: true` or
+     `defaultMode: bypassPermissions`, or cannot be read.
+4. **What the guard does not read.** Some layers can answer a prompt, or decide what the session
+   loaded, without the hook seeing them:
+   - a permission-prompt tool (`--permission-prompt-tool`) or an SDK permission callback, and a
+     non-interactive run (`-p`);
+   - `--settings <file>`, plugin hooks, managed settings outside the two files it reads (other
+     platforms, drop-in directories, device or server policy);
+   - any other mode that approves on its own, because the mode check names `bypassPermissions`
+     only;
+   - the settings the session loaded, as opposed to the files as they are now.
 
-   Otherwise it denies.
-3. **What the guard cannot see.** A permission-prompt tool given on the command line
-   (`--permission-prompt-tool`) and settings changed after the session started are invisible to a
-   PreToolUse hook. Because of these blind spots, the evidence must come from a real session and
-   cannot be inferred from configuration.
-4. **The proof is the owner's.** A controlled experiment in fresh interactive sessions, with the
-   settings present at start, run with and without `bypassPermissions` and with and without user
-   `PermissionRequest` hooks, records whether the prompt reached the person. It may set
-   `PROMPT_EVIDENCE`; nothing else does.
-5. **The guide says what the guard does.** `docs/agent-setup/guardrails.md`, rendered by
-   `agent-guardrails`, states that every route is denied; a test ties the row to `PROMPT_EVIDENCE`.
+   Before `PROMPT_EVIDENCE` is ever set, the mode check becomes an allowlist and these layers are
+   read or denied, each with a test. Configuration cannot stand in for the session's proof.
+5. **The proof is the owner's.** It comes from a controlled experiment in fresh interactive
+   sessions, on a build of the guard that opens the route without its layer check, used only
+   through `BRAKES_BIN` and never installed. The experiment uses a scratch repository and a token
+   scoped to it alone, and varies these factors:
+   - `bypassPermissions` on or off;
+   - user `PermissionRequest` hooks or none;
+   - the guard binary or the fallback;
+   - the rule present at start or added mid-session.
+
+   Each session records the host version, the hook payload, the prompt and the label's actor. Only
+   that record may set `PROMPT_EVIDENCE`.
+6. **The guide says what the guard does.** The row in `docs/agent-setup/guardrails.md`, rendered by
+   `agent-guardrails`, calls the hook a brake over the commands it can read and names the App token
+   and the person's own login as the barrier. A test ties the row to `PROMPT_EVIDENCE`.
 
 Rejected: trusting the host's documented ask behaviour without a session's proof, the assumption
 the incident disproved.
