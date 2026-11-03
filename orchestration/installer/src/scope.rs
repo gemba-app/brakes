@@ -157,7 +157,16 @@ pub(crate) fn github_path(remote: &str) -> Result<String> {
     let path = if let Some(path) = remote.strip_prefix("git@github.com:") {
         path.to_owned()
     } else {
-        let url = url::Url::parse(remote)?;
+        // A clone of a local path (`git clone /srv/git/app`) has no URL to identify it by.
+        let url = match url::Url::parse(remote) {
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                return refuse(format!(
+                    "Remote is a local path, not a GitHub URL: {remote}; point it at GitHub \
+                     with `git remote set-url <remote> https://github.com/<owner>/<name>.git`"
+                ));
+            }
+            parsed => parsed?,
+        };
         if url.host_str() != Some("github.com") {
             return refuse("Remote is not an allowed personal GitHub repository");
         }
@@ -228,6 +237,21 @@ mod tests {
             remote_identity_in(&config, "https://github.com/Example-Owner/App.git").unwrap(),
             "example-owner/app"
         );
+    }
+
+    #[test]
+    fn a_remote_that_is_a_local_path_is_refused_naming_the_fix() {
+        let config = Config::for_test("example-owner", &["example-owner/*"], &[]);
+        for remote in ["/srv/git/app", "../app", "app.git"] {
+            assert_eq!(
+                remote_identity_in(&config, remote).unwrap_err().to_string(),
+                format!(
+                    "Remote is a local path, not a GitHub URL: {remote}; point it at GitHub with \
+                     `git remote set-url <remote> https://github.com/<owner>/<name>.git`"
+                ),
+                "{remote}"
+            );
+        }
     }
 
     #[test]
