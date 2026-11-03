@@ -547,6 +547,26 @@ fn a_generated_agentic_ci_yml_is_retired_and_the_seed_written_beside_the_project
     );
     assert!(!out.contains("workflow seed writes no"), "{out}");
     managed_workflows_run_no_command(&repo);
+    // #67: from then on the seed the lock records is ci-baseline's, beside the
+    // project's own workflows: a later install keeps it and changes nothing.
+    let again = repo.install(&[], true);
+    assert!(
+        again.contains(&format!("SKIP {SEED} [seed:ci-baseline]")),
+        "{again}"
+    );
+    assert!(!again.contains("workflow seed writes no"), "{again}");
+    assert_eq!(lock_class(&repo, SEED).as_deref(), Some("seed"));
+    let third = repo.install(&[], false);
+    assert!(third.lines().any(|l| l == "No changes."), "{third}");
+    // A seed the project deleted is the project's decision: never written again
+    // beside its own workflows, and forgotten as before.
+    std::fs::remove_file(repo.root.join(SEED)).unwrap();
+    let deleted = repo.install(&[], true);
+    assert!(!deleted.contains(&format!("WRITE {SEED}")), "{deleted}");
+    assert!(repo.read(SEED).is_none(), "{deleted}");
+    assert_eq!(lock_class(&repo, SEED), None);
+    let after = repo.install(&[], false);
+    assert!(after.contains("workflow seed writes no"), "{after}");
 }
 
 #[test]

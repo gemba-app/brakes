@@ -115,7 +115,8 @@ fn seed_files(cx: &Context<'_>, answers: &CiBaselineAnswers) -> Result<Vec<Rende
 }
 
 /// The notes of the mode (#21): under `seed` with workflows of the project's
-/// own, that no seed is written; under `generate`, that it is deprecated.
+/// own and no seed of this module's on disk (#67), that no seed is written;
+/// under `generate`, that it is deprecated.
 fn seed_notes(cx: &Context<'_>, answers: &CiBaselineAnswers) -> Result<Vec<String>> {
     Ok(match answers.workflow {
         WorkflowMode::Seed => {
@@ -167,8 +168,9 @@ impl Module for CiBaseline {
             None
         };
         let foreign = brownfield::foreign_workflows(cx)?;
-        // The project's CI, written once (#21): only where it has none of its own.
-        // A migration from a generated workflow replaces it with the seed (#25).
+        // The project's CI, written once (#21): only where it has none of its own,
+        // or where the seed this module wrote is still there (#67). A migration
+        // from a generated workflow replaces it with the seed (#25).
         let seed =
             if answers.workflow == WorkflowMode::Seed && brownfield::seed_allowed(cx, &foreign) {
                 Some(Rendered {

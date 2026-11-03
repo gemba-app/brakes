@@ -665,7 +665,9 @@ migration is planned, the manual step `generate-to-seed` asks for `agentic-requi
 required before the migrating pull request merges (probe `required-check`). That pull
 request's own run reports both the seed's `required` and `agentic-required`, and the
 generated workflow no longer runs on it, so no check named `required` reports twice and
-none stops reporting.
+none stops reporting. Once migrated, the `ci.yml` the lock records as the module's
+seed stays rendered (`SKIP`) beside the project's own workflows while it exists, so
+later plans keep its record; one the project deleted is not written again (#67).
 
 **Commands are read at run time (`workflow: generate`, deprecated).** `ci-baseline`
 requires `stack-packs` and renders one `managed` workflow, `.github/workflows/ci.yml`
