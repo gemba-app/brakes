@@ -427,6 +427,9 @@ fn run(raw: Vec<std::ffi::OsString>) -> Result<u8> {
             apply(&root, &[(accepted.path, Some(accepted.after))].into())?;
         }
         println!("{}", outcome(changed, apply_changes));
+        if !apply_changes {
+            print_apply_refusal(&project, new_personal);
+        }
         return Ok(0);
     }
     inputs.catalogue = source.clone();

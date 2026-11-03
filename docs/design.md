@@ -35,8 +35,9 @@ A plan runs under the read scope and `--apply` under the write scope, which name
 repository by its GitHub remotes. When the write scope would refuse, the plan of
 `install`, `configure`, `remove` and `ci init` ends with `APPLY REFUSED: <reason>`, the
 reason the apply will give, and still exits 0 (#55). A remote that is not a URL, such
-as the local path of a clone, is refused by name with the `git remote set-url` that
-fixes it.
+as the local path of a clone, or a `file:` URL is refused by name with the
+`git remote set-url` that fixes it; a URL that fails to parse for another reason is
+refused without its text, which may carry a credential.
 
 ## Configuration contract
 

@@ -108,10 +108,7 @@ fn without_configuration_doctor_and_plans_run_and_write_nothing() {
         ] {
             let (ok, out) = unconfigured(&args, &config_home);
             assert!(ok, "{args:?}: {out}");
-            assert!(
-                !out.lines().any(|l| l.starts_with("REFUSED")),
-                "{args:?}: {out}"
-            );
+            assert_eq!(out.matches("REFUSED").count(), 1, "{args:?}: {out}");
             assert_eq!(
                 out.lines().last(),
                 Some(format!("APPLY REFUSED: {}", brakes::config::NO_CONFIGURATION).as_str()),
