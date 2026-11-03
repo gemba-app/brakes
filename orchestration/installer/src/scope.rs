@@ -157,7 +157,12 @@ pub(crate) fn github_path(remote: &str) -> Result<String> {
     let path = if let Some(path) = remote.strip_prefix("git@github.com:") {
         path.to_owned()
     } else {
-        let url = url::Url::parse(remote)?;
+        // A path or any other text that is not a URL (#55): named, with the fix.
+        let Ok(url) = url::Url::parse(remote) else {
+            return refuse(format!(
+                "Remote is not a GitHub URL: {remote}; the write scope names the repository by its GitHub remote (git remote set-url origin https://github.com/<owner>/<name>.git)"
+            ));
+        };
         if url.host_str() != Some("github.com") {
             return refuse("Remote is not an allowed personal GitHub repository");
         }
@@ -209,6 +214,23 @@ mod tests {
         ] {
             let error = remote_identity_in(&empty, remote).unwrap_err().to_string();
             assert_eq!(error, crate::config::NO_CONFIGURATION, "{remote}");
+        }
+    }
+
+    #[test]
+    fn a_remote_that_is_not_a_url_is_refused_naming_it_and_the_fix() {
+        // #55: a clone of a local path has a path for its origin; `url` answered
+        // "relative URL without a base", which named neither the remote nor the fix.
+        let config = Config::for_test("example-owner", &["example-owner/*"], &[]);
+        for remote in ["/srv/clones/app", "../app", "file-less-path"] {
+            let error = remote_identity_in(&config, remote).unwrap_err().to_string();
+            assert_eq!(
+                error,
+                format!(
+                    "Remote is not a GitHub URL: {remote}; the write scope names the repository by its GitHub remote (git remote set-url origin https://github.com/<owner>/<name>.git)"
+                ),
+                "{remote}"
+            );
         }
     }
 
