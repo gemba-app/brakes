@@ -4,6 +4,51 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## The person's `human-approved` route stays denied until a real session proves the prompt — 2026-11-03
+
+Context (#28): the guard was built to route one canonical command,
+`gh pr edit <n> [--repo <owner>/<repo>] --add-label human-approved`, to the person through
+Claude Code's explicit `permissions.ask` rule. The host's documentation states that such a rule
+prompts in every permission mode, `bypassPermissions` included. In a real session the opposite
+happened: `bypassPermissions` was on and the project's settings carried the rule. The agent ran
+the command, it executed, and the person saw no prompt. Three facts contributed:
+
+- the merge-guard wrapper ran on its fallback;
+- the user settings carried `PermissionRequest` hooks with matcher `*`, which can answer a prompt
+  on the person's behalf;
+- the project settings changed mid-session.
+
+Which of them, or which combination, let the command through has not been established.
+
+1. **Fail safe.** The guard denies the canonical form like every other route that sets the label
+   (`PROMPT_EVIDENCE` is `None`). The POSIX fallback denies it as well. The person sets the label
+   on GitHub under their own login.
+2. **`ask` only behind evidence and only where nothing answers for the person.** The route
+   reopens only when a real interactive session, recorded in `PROMPT_EVIDENCE`, has shown the
+   person the prompt. Even then the guard returns `ask` only when every one of these holds:
+   - the hook runs under Claude Code (`CLAUDE_PROJECT_DIR` absolute), outside CI;
+   - the session runs on a person's token, not the agents' App;
+   - the project's settings carry the exact rule;
+   - no layer it can read may answer the prompt: a `bypassPermissions` mode in the payload, or a
+     managed, user, project or local settings file with `PermissionRequest` hooks,
+     `skipDangerousModePermissionPrompt: true` or `defaultMode: bypassPermissions`, or that
+     cannot be read.
+
+   Otherwise it denies.
+3. **What the guard cannot see.** A permission-prompt tool given on the command line
+   (`--permission-prompt-tool`) and settings changed after the session started are invisible to a
+   PreToolUse hook. Because of these blind spots, the evidence must come from a real session and
+   cannot be inferred from configuration.
+4. **The proof is the owner's.** A controlled experiment in fresh interactive sessions, with the
+   settings present at start, run with and without `bypassPermissions` and with and without user
+   `PermissionRequest` hooks, records whether the prompt reached the person. It may set
+   `PROMPT_EVIDENCE`; nothing else does.
+5. **The guide says what the guard does.** `docs/agent-setup/guardrails.md`, rendered by
+   `agent-guardrails`, states that every route is denied; a test ties the row to `PROMPT_EVIDENCE`.
+
+Rejected: trusting the host's documented ask behaviour without a session's proof, the assumption
+the incident disproved.
+
 ## A declared `ci.required_checks` is stale only when it misses a check the answers require — 2026-11-03
 
 Decided by the owner. Context: `ci.project-ci-stale` (Bronze) warned whenever
