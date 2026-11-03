@@ -1,9 +1,9 @@
 {
   "schema": 2,
-  "version": "0.5.1",
-  "source_commit": "72ed4ac7c52f7d043cf121332bf6722386490694",
+  "version": "0.5.4",
+  "source_commit": "54d1c3e3d1659805c35430c2971f523b5edd8e7e",
   "source_dirty": false,
-  "personal_owner": "gemba-app/brakes",
+  "personal_owner": "gemba-app",
   "modules": {
     "agent-guardrails": {
       "version": "1.0.0",
@@ -242,7 +242,7 @@
     "docs/agent-setup/guardrails.md": {
       "module": "agent-guardrails",
       "class": "managed",
-      "digest": "4b15f101321443cd73b7618b349dbdf5fe6f92b985004f95d7e69216eda3205b"
+      "digest": "47e460972b8cbdde46f52c2dfbe70986057b9a8ef208e98df31b5d7ffa771afa"
     },
     "docs/agent-setup/rfc-template.md": {
       "module": "repo-baseline",
