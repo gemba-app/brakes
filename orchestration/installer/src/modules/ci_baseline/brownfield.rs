@@ -397,10 +397,21 @@ pub fn recorded_generated(cx: &Context<'_>) -> Option<&'static str> {
 
 /// Whether `workflow: seed` writes `ci.yml` (#21, #25): where the project has no
 /// workflow of its own, or where it migrates from a generated workflow, which was
-/// its CI, and no `ci.yml` of its own is in the way.
+/// its CI, and no `ci.yml` of its own is in the way. A `ci.yml` the lock records
+/// as this module's seed stays rendered beside the project's workflows, so the
+/// lock keeps it (#67).
 pub fn seed_allowed(cx: &Context<'_>, foreign: &[String]) -> bool {
     foreign.is_empty()
+        || recorded_seed(cx)
         || (recorded_generated(cx).is_some() && !foreign.iter().any(|f| f == WORKFLOW_PATH))
+}
+
+/// True when the installed lock records `ci.yml` as ci-baseline's seed.
+fn recorded_seed(cx: &Context<'_>) -> bool {
+    cx.previous
+        .files
+        .get(WORKFLOW_PATH)
+        .is_some_and(|e| e.module == CI_BASELINE && e.class == Ownership::Seed)
 }
 
 /// The commands that add `check` to the default branch's required checks.
