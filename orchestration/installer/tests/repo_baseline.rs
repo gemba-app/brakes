@@ -150,7 +150,11 @@ fn bypass_actors_are_empty_except_for_owner_bypass_in_p1() {
 #[test]
 fn one_approval_sets_the_three_review_parameters() {
     for tier in [Tier::P2, Tier::P3] {
-        let value = value_of(tier, &Answers::defaults(tier), &plain_project());
+        let answers = Answers {
+            approvals: Approvals::OneApproval,
+            ..Answers::defaults(tier)
+        };
+        let value = value_of(tier, &answers, &plain_project());
         let parameters = &rule(&value, "pull_request")["parameters"];
         assert_eq!(parameters["required_approving_review_count"], 1, "{tier:?}");
         assert_eq!(parameters["require_last_push_approval"], true, "{tier:?}");
@@ -187,7 +191,7 @@ fn defaults_follow_the_owner_policy_by_tier() {
         assert_eq!(
             Answers::defaults(tier),
             Answers {
-                approvals: Approvals::OneApproval,
+                approvals: Approvals::ChecksOnly,
                 codeowners: true,
                 bypass_actors: Vec::new(),
             }
@@ -447,14 +451,15 @@ fn edited_ruleset_file_refuses() {
 }
 
 #[test]
-fn p2_module_renders_one_approval_through_the_engine() {
+/// Decision 2026-11-03: P2 merges on green unless a review is answered.
+fn p2_module_renders_no_required_review_through_the_engine() {
     let f = Fixture::profiled(Tier::P2);
     let module = RepoBaseline;
     f.apply(&module);
     let written: Value = serde_json::from_str(&f.read(RULESET_PATH)).unwrap();
     assert_eq!(
         rule(&written, "pull_request")["parameters"]["required_approving_review_count"],
-        1
+        0
     );
     assert_eq!(written["bypass_actors"], json!([]));
 }
@@ -549,7 +554,7 @@ fn answers_schema_declares_the_four_spec_questions() {
     );
     assert_eq!(
         approvals.default,
-        Some(json!({ "P1": "checks-only", "P2": "one-approval", "P3": "one-approval" }))
+        Some(json!({ "P1": "checks-only", "P2": "checks-only", "P3": "checks-only" }))
     );
     let updates = schema.question("dependency_updates").unwrap();
     assert_eq!(
@@ -584,8 +589,8 @@ fn answers_module_has_no_when_and_no_secret_question() {
 fn answers_defaults_follow_the_profile() {
     for (tier, approvals, codeowners) in [
         (Tier::P1, "checks-only", false),
-        (Tier::P2, "one-approval", true),
-        (Tier::P3, "one-approval", true),
+        (Tier::P2, "checks-only", true),
+        (Tier::P3, "checks-only", true),
     ] {
         let resolved = RepoBaseline
             .questions()
@@ -607,8 +612,10 @@ fn answers_defaults_follow_the_profile() {
 }
 
 #[test]
+/// Decision 2026-11-03: by default no profile asks for a review, so the code
+/// owner review follows only an answered `one-approval`.
 fn answers_codeowners_default_reaches_the_ruleset_by_profile() {
-    for (tier, expected) in [(Tier::P2, true), (Tier::P3, true)] {
+    for (tier, expected) in [(Tier::P2, false), (Tier::P3, false)] {
         let f = Fixture::profiled(tier);
         f.apply(&RepoBaseline);
         assert_eq!(
@@ -618,11 +625,13 @@ fn answers_codeowners_default_reaches_the_ruleset_by_profile() {
         );
     }
     let f = Fixture::profiled(Tier::P2);
-    let planned = f.configure(&RepoBaseline, &["codeowners=false"]).unwrap();
+    let planned = f
+        .configure(&RepoBaseline, &["approvals=one-approval"])
+        .unwrap();
     apply(&f.root, &planned.changes).unwrap();
     assert_eq!(
         rule(&f.ruleset(), "pull_request")["parameters"]["require_code_owner_review"],
-        false
+        true
     );
 }
 
@@ -2402,8 +2411,8 @@ fn lifecycle_profile_is_recorded_with_the_answers_and_drives_the_defaults() {
     );
     let ruleset = f.ruleset();
     let parameters = &rule(&ruleset, "pull_request")["parameters"];
-    assert_eq!(parameters["required_approving_review_count"], 1);
-    assert_eq!(parameters["require_code_owner_review"], true);
+    assert_eq!(parameters["required_approving_review_count"], 0);
+    assert_eq!(parameters["require_code_owner_review"], false);
     assert!(f.root.join(CODEOWNERS).is_file(), "P2 seeds CODEOWNERS");
     // The recorded profile holds without the flag; repeating it changes nothing.
     assert!(install(&f, &[], None).unwrap().changes.is_empty());
@@ -2464,7 +2473,7 @@ fn lifecycle_configure_keeps_the_recorded_profile() {
     let recorded = recorded_answers(&f);
     assert_eq!(recorded["profile"], "P3");
     assert_eq!(recorded["answers"]["dependency_updates"], "renovate");
-    assert_eq!(recorded["answers"]["approvals"], "one-approval");
+    assert_eq!(recorded["answers"]["approvals"], "checks-only");
     assert!(f.root.join(RENOVATE).is_file());
 }
 
@@ -2787,7 +2796,13 @@ fn a_registered_actor_renders_through_the_engine_by_full_form_or_prefix() {
         let f = Fixture::profiled(Tier::P2);
         inventory(&f, json!([bypass_entry(target)]));
         let planned = f
-            .configure(&RepoBaseline, &[&format!("bypass_actors={ORG_ADMIN}")])
+            .configure(
+                &RepoBaseline,
+                &[
+                    "approvals=one-approval",
+                    &format!("bypass_actors={ORG_ADMIN}"),
+                ],
+            )
             .unwrap();
         assert_eq!(
             planned.tags[REVIEW_RULESET_PATH],

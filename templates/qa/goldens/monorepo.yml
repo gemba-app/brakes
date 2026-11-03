@@ -55,10 +55,13 @@ jobs:
             tasks/**
             **/*.md
           PROTECTED_PATHS: |-
-            .github/workflows/**
             .github/rulesets/**
             .github/CODEOWNERS
-            .agent-setup/lock.json
+            .github/workflows/ci.yml
+            .github/workflows/agentic-*.yml
+            .github/workflows/*release*
+            .github/workflows/*deploy*
+            .github/workflows/*publish*
             tests/heldout/**
             apps/backend/qa/web/*-snapshots/**
             apps/front/qa/web/*-snapshots/**
