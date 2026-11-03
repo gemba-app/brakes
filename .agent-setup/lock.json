@@ -1,9 +1,9 @@
 {
   "schema": 2,
   "version": "0.5.4",
-  "source_commit": "54ef266fef9e706a2aff45ea406be7b5db597bdf",
+  "source_commit": "598e4168fec00860a02f6298053a7c59e283055d",
   "source_dirty": false,
-  "personal_owner": "gemba-app",
+  "personal_owner": "gemba-app/brakes",
   "modules": {
     "agent-guardrails": {
       "version": "1.0.0",
