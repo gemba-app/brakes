@@ -31,6 +31,13 @@ command, never calls the network during a local plan, never writes outside the
 repository root or follows a symbolic link out of it, and writes at most one repository
 per invocation. Writes are refused unless the configuration allows the repository
 (below); there is no fleet-wide write and no change to home-level settings.
+A plan runs under the read scope and `--apply` under the write scope, which names the
+repository by its GitHub remotes. When the write scope would refuse, the plan of
+`install`, `configure`, `remove` and `ci init` ends with `APPLY REFUSED: <reason>`, the
+reason the apply will give, and still exits 0 (#55). A remote that is not a URL, such
+as the local path of a clone, or a `file:` URL is refused by name with the
+`git remote set-url` that fixes it; a URL that fails to parse for another reason is
+refused without its text, which may carry a credential.
 
 ## Configuration contract
 
@@ -658,7 +665,9 @@ migration is planned, the manual step `generate-to-seed` asks for `agentic-requi
 required before the migrating pull request merges (probe `required-check`). That pull
 request's own run reports both the seed's `required` and `agentic-required`, and the
 generated workflow no longer runs on it, so no check named `required` reports twice and
-none stops reporting.
+none stops reporting. Once migrated, the `ci.yml` the lock records as the module's
+seed stays rendered (`SKIP`) beside the project's own workflows while it exists, so
+later plans keep its record; one the project deleted is not written again (#67).
 
 **Commands are read at run time (`workflow: generate`, deprecated).** `ci-baseline`
 requires `stack-packs` and renders one `managed` workflow, `.github/workflows/ci.yml`
