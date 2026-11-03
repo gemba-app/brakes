@@ -573,7 +573,11 @@ fn stale_ci_fields_are_one_warning_naming_them() {
 fn declared_required_checks_are_stale_only_when_they_miss_a_required_one() {
     let workflow = format!("{HEAD}{GATE}");
     let stale = |checks: Value, answers: Value| {
-        let profile = json!({"ci": {"required_checks": checks}});
+        let profile = if checks.is_null() {
+            json!({"ci": {}})
+        } else {
+            json!({"ci": {"required_checks": checks}})
+        };
         let all = findings(&[("ci.yml", &workflow)], profile, Some(answers));
         !rule_lines(&all, "ci.project-ci-stale").is_empty()
     };
@@ -587,7 +591,8 @@ fn declared_required_checks_are_stale_only_when_they_miss_a_required_one() {
         seed.clone()
     ));
     assert!(stale(json!(["required", "neutrality"]), seed.clone()));
-    assert!(stale(json!([]), seed));
+    assert!(stale(json!([]), seed.clone()));
+    assert!(!stale(Value::Null, seed), "an absent field is not judged");
     let existing = json!({"workflow": "existing", "aggregate_check": "gate"});
     assert!(!stale(json!(["gate", "promote"]), existing.clone()));
     assert!(stale(json!(["promote"]), existing));
