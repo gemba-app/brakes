@@ -398,11 +398,12 @@ pub fn recorded_generated(cx: &Context<'_>) -> Option<&'static str> {
 /// Whether `workflow: seed` writes `ci.yml` (#21, #25): where the project has no
 /// workflow of its own, or where it migrates from a generated workflow, which was
 /// its CI, and no `ci.yml` of its own is in the way. A `ci.yml` the lock records
-/// as this module's seed stays rendered beside the project's workflows, so the
-/// lock keeps it (#67).
+/// as this module's seed stays rendered beside the project's workflows while it
+/// exists, so the lock keeps it (#67); one the project deleted is not written
+/// again there.
 pub fn seed_allowed(cx: &Context<'_>, foreign: &[String]) -> bool {
     foreign.is_empty()
-        || recorded_seed(cx)
+        || (recorded_seed(cx) && cx.root.join(WORKFLOW_PATH).is_file())
         || (recorded_generated(cx).is_some() && !foreign.iter().any(|f| f == WORKFLOW_PATH))
 }
 
