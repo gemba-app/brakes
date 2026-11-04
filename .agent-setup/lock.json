@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": "0.5.4",
-  "source_commit": "598e4168fec00860a02f6298053a7c59e283055d",
+  "source_commit": "1196caa4135df42f6854a8a650319cfaf698ca80",
   "source_dirty": false,
   "personal_owner": "gemba-app/brakes",
   "modules": {
@@ -184,7 +184,7 @@
     ".github/workflows/agentic-security.yml": {
       "module": "ci-baseline",
       "class": "managed",
-      "digest": "be7c03c18965cb9e575f2345c0404e7a7580e6b3148098286695d626fb658d3b"
+      "digest": "590adc266ff69170225a9181884fba4b3260da4e9eae90c570ee4bc6df140830"
     },
     ".github/workflows/ci.yml": {
       "module": "ci-baseline",
