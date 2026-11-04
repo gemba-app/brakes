@@ -759,6 +759,10 @@ they go to a separate `managed` workflow, `.github/workflows/agentic-security.ym
 (`name: Security (brakes)`), with its own `scope` and the aggregate
 `agentic-required`, made required beside the project's check by the remote item
 `github:add-agentic-required-check` after the step `agentic-required-reported`.
+The project's own `.github/actionlint.yaml` is `never-touch`, so its actionlint lints these jobs
+without the module's ignore: when a rendered workflow declares `cache-mode` (actionlint 1.7.12
+rejects the key, rhysd/actionlint#762), the plan ends with a `NOTE [ci-baseline]` naming the
+`unexpected key "cache-mode"` ignore the project adds (#27). The key stays: it is a hardening.
 
 **Composition through `ci_jobs`.** Another module adds jobs only through the additive
 `Module::ci_jobs`, read by `ci-baseline` from `Context::contributed_jobs`, never by
