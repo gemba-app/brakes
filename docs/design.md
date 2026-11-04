@@ -811,7 +811,7 @@ as written, so its comments and layout stay. `doctor` prints one line with the c
 `doctor --propose` prints every finding as `PROPOSE <rule> <file>: <text>` with its
 unified diff (`--json --propose` adds `proposals`), then states that nothing was
 written. Nothing in the module writes: a patch reaches the default branch through a
-pull request, labelled `human-approved` when the workflow is a protected path. The
+pull request labelled `human-approved`, since workflows are a protected path. The
 proposals never change readiness, a level or the exit code: the ids the catalogue
 already holds are judged, as before, from `doctor`'s own `WARNING` lines, and the new
 ones (`ci.concurrency`, `ci.pull-request-target-head`, `ci.untrusted-interpolation`,

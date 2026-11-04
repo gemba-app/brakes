@@ -19,12 +19,15 @@
 #                   every app runs every app
 #   PROTECTED_PATHS prefix globs whose change in a pull request needs the
 #                   `human-approved` label; a protected path is never inert; a
-#                   negation is never evaluated and protects nothing less
+#                   negation is never evaluated and protects nothing less; a
+#                   change made only of action pins moved to the commits of
+#                   their tags is routine and not listed (decision 2026-11-03)
 #   GITHUB_OUTPUT   the step output file
 # Outputs, written to $GITHUB_OUTPUT and printed on stdout as the same lines:
 #   tier=full|docs
 #   skippable=<JSON array of job ids>
-#   protected=<JSON array of changed protected paths>; `["<unknown>"]` when a
+#   protected=<JSON array of changed protected paths but the pin bumps>;
+#             `["<unknown>"]` when a
 #             pull request's files cannot be listed; `[]` outside pull requests
 #   changed-<id>=true|false   one per app, in APPS order
 set -euo pipefail
@@ -164,12 +167,71 @@ done <<< "$protected_paths"
 if [ -n "$negated" ]; then
   echo "::warning::protected_paths carries a negation (${negated# }); negations are never evaluated and protect nothing less"
 fi
+# A pin line: `uses: <owner>/<repo>[/<path>]@<40-hex commit> # <tag>`.
+pin_re='^([[:space:]]*(- )?use[s]:[[:space:]]*)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(/[A-Za-z0-9_./-]+)?@([0-9a-f]{40})[[:space:]]+#[[:space:]]*([A-Za-z0-9_.+-]+)[[:space:]]*$'
+
+# True when the code host's tag `$2` of `$1` names the commit `$3`; an annotated
+# tag counts by the commit it peels to. No answer is no.
+is_tag_commit() {
+  local refs sha ref direct="" peeled=""
+  refs="$(GIT_TERMINAL_PROMPT=0 git ls-remote --tags "https://github.com/$1" "refs/tags/$2" "refs/tags/$2^{}" 2>/dev/null)" || return 1
+  while IFS=$'\t' read -r sha ref; do
+    [ "$ref" = "refs/tags/$2" ] && direct=$sha
+    [ "$ref" = "refs/tags/$2^{}" ] && peeled=$sha
+  done <<< "$refs"
+  [ -z "$peeled" ] || direct=$peeled
+  [ -n "$direct" ] && [ "$direct" = "$3" ]
+}
+
+# True when `$1` replaces the pin `$2` of an action with a pin of the same
+# action, at the same place, on the commit of the tag its comment names.
+is_pin_pair() {
+  local prefix action
+  [[ $1 =~ $pin_re ]] || return 1
+  prefix=${BASH_REMATCH[1]}
+  action=${BASH_REMATCH[3]}${BASH_REMATCH[4]}
+  [[ $2 =~ $pin_re ]] || return 1
+  [ "${BASH_REMATCH[1]}" = "$prefix" ] || return 1
+  [ "${BASH_REMATCH[3]}${BASH_REMATCH[4]}" = "$action" ] || return 1
+  is_tag_commit "${BASH_REMATCH[3]}" "${BASH_REMATCH[6]}" "${BASH_REMATCH[5]}"
+}
+
+# True when this pull request's change to the existing file `$1` is made only of
+# pin pairs, each removed line followed in its hunk by the line replacing it. A
+# new, deleted, renamed or mode-changed file, or any other line, is not a bump.
+is_pin_bump() {
+  local diff line pending="" old hunk=false
+  diff="$(git -c diff.renames=false -c core.quotePath=false diff -U0 --no-color --no-ext-diff "$BASE_SHA...$HEAD_SHA" -- "$1")" || return 1
+  [ -n "$diff" ] || return 1
+  while IFS= read -r line; do
+    if ! $hunk; then
+      case "$line" in
+        'diff --git '* | 'index '* | '--- a/'* | '+++ b/'*) continue ;;
+        '@@ '*) hunk=true; continue ;;
+        *) return 1 ;;
+      esac
+    fi
+    case "$line" in
+      '@@ '*) [ -z "$pending" ] || return 1 ;;
+      -*) pending="$pending${line#-}"$'\n' ;;
+      +*)
+        [ -n "$pending" ] || return 1
+        old=${pending%%$'\n'*}
+        pending=${pending#*$'\n'}
+        is_pin_pair "$old" "${line#+}" || return 1
+        ;;
+      *) return 1 ;;
+    esac
+  done <<< "$diff"
+  $hunk && [ -z "$pending" ]
+}
+
 changed_protected=""
 if [ "$event" = pull_request ] && ! $diffed; then
   changed_protected='<unknown>'$'\n'
 elif $listed; then
   while IFS= read -r file; do
-    if matches "$file" "$protected_paths"; then
+    if matches "$file" "$protected_paths" && ! is_pin_bump "$file"; then
       changed_protected="$changed_protected$file"$'\n'
     fi
   done <<< "$files"

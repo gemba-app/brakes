@@ -46,15 +46,10 @@ jobs:
             tasks/**
             **/*.md
           PROTECTED_PATHS: |-
+            .github/workflows/**
             .github/rulesets/**
             .github/CODEOWNERS
-            .github/workflows/ci.yml
-            .github/workflows/agentic-*.yml
-            .github/workflows/*release*
-            .github/workflows/*deploy*
-            .github/workflows/*publish*
-            .github/workflows/neutrality.yml
-            .github/workflows/_reusable-verify.yml
+            .agent-setup/lock.json
             tests/heldout/**
         run: |
           #!/usr/bin/env bash
