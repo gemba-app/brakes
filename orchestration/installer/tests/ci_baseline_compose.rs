@@ -74,6 +74,28 @@ impl Module for Witness {
     }
 }
 
+/// A contributor whose job declares `cache-mode`, as agent-guardrails' cross-review does.
+struct Caching;
+impl Module for Caching {
+    fn id(&self) -> &'static str {
+        "caching"
+    }
+    fn version(&self) -> &'static str {
+        "1.0.0"
+    }
+    fn render(&self, _: &Context<'_>) -> Result<Vec<Rendered>> {
+        Ok(Vec::new())
+    }
+    fn ci_jobs(&self, _: &Context<'_>) -> Vec<CiJob> {
+        vec![CiJob {
+            id: "cached-job".to_owned(),
+            yaml: "name: cached-job\nneeds: scope\nruns-on: ubuntu-24.04\ntimeout-minutes: 10\ncache-mode: none\nsteps:\n  - run: echo x\n".to_owned(),
+            skippable_under: Vec::new(),
+            app: None,
+        }]
+    }
+}
+
 fn contributor(id: &'static str, jobs: &[(&'static str, bool)]) -> Contributor {
     Contributor {
         id,
@@ -554,5 +576,50 @@ fn an_app_outside_the_stack_packs_record_refuses() {
             apps: vec!["api", "mobile"],
         }]),
         "Module per-app contributes CI job mobile-qa for app mobile, which is not a stack-packs app"
+    );
+}
+
+/// #27: under `workflow: existing` the project's own `.github/actionlint.yaml` is never
+/// touched, so its actionlint rejects the `cache-mode` key of a contributed job. The plan
+/// names the ignore the project needs; with no config of its own the module's carries it.
+#[test]
+fn existing_with_a_project_actionlint_config_names_the_cache_mode_ignore() {
+    let repo = Repo::new();
+    fs::write(
+        repo.root.join(".agent-setup/modules/ci-baseline.json"),
+        r#"{"module": "ci-baseline", "version": "1.0.0", "answers": {"workflow": "existing", "aggregate_check": "build"}}"#,
+    )
+    .unwrap();
+    let workflows = repo.root.join(".github/workflows");
+    fs::create_dir_all(&workflows).unwrap();
+    fs::write(
+        workflows.join("build.yml"),
+        "name: build\non: push\njobs: {}\n",
+    )
+    .unwrap();
+    let notes = |repo: &Repo| -> Vec<String> {
+        repo.plan(&[&Caching])
+            .unwrap()
+            .plan_notes
+            .iter()
+            .map(PlanNote::to_string)
+            .collect()
+    };
+    // The module's own config carries the ignore: nothing to say.
+    assert!(
+        !notes(&repo).iter().any(|n| n.contains("cache-mode")),
+        "{:?}",
+        notes(&repo)
+    );
+    // The project's own config does not: the note names the exact ignore.
+    fs::write(repo.root.join(".github/actionlint.yaml"), "paths: {}\n").unwrap();
+    let notes = notes(&repo);
+    let note = notes
+        .iter()
+        .find(|n| n.contains("cache-mode"))
+        .unwrap_or_else(|| panic!("{notes:?}"));
+    assert_eq!(
+        note,
+        "NOTE [ci-baseline] .github/actionlint.yaml is the project's own and actionlint rejects the `cache-mode` key of .github/workflows/agentic-security.yml (rhysd/actionlint#762): add `unexpected key \"cache-mode\"` to the `ignore` of `paths: .github/workflows/**/*.{yml,yaml}`"
     );
 }

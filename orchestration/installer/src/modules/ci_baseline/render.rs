@@ -114,6 +114,12 @@ pub const CACHE_MODE_IGNORE: &str = "unexpected key \"cache-mode\"";
 const RUNNER_BLOCK: &str = "self-hosted-runner:\n  labels:\n    - {{labels}}\n";
 const IGNORE_BLOCK: &str = "paths:\n  .github/workflows/**/*.{yml,yaml}:\n    ignore:\n      # actionlint 1.7.12 rejects the `cache-mode` job key GitHub enforces\n      # (rhysd/actionlint#762); the ignore leaves with the actionlint bump that accepts it.\n      - '{{ignore}}'\n";
 
+/// Whether a rendered workflow declares `cache-mode` (`other` says another rendered
+/// workflow does), so the actionlint of the repository needs [`CACHE_MODE_IGNORE`].
+pub fn declares_cache_mode(workflow: &str, other: bool) -> bool {
+    other || workflow.contains("\n    cache-mode:")
+}
+
 /// `.github/actionlint.yaml` when the repository needs one: the labels actionlint
 /// does not know (the configured runners' labels for the Linux jobs and the macOS job,
 /// #784, then `existing`, the custom labels the project's own jobs
@@ -148,7 +154,7 @@ pub fn actionlint_config(
         let labels: Vec<String> = labels.iter().map(|l| scalar(l)).collect();
         blocks.push_str(&RUNNER_BLOCK.replace("{{labels}}", &labels.join("\n    - ")));
     }
-    if other_cache_mode || workflow.contains("\n    cache-mode:") {
+    if declares_cache_mode(workflow, other_cache_mode) {
         blocks.push_str(&IGNORE_BLOCK.replace("{{ignore}}", CACHE_MODE_IGNORE));
     }
     (!blocks.is_empty()).then(|| {

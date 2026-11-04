@@ -343,6 +343,26 @@ impl Module for CiBaseline {
             .contributed
             .iter()
             .map(|job| format!("JOB [{}] {} → {path}", job.module, job.id));
+        // The project's own actionlint configuration is never touched, so its actionlint
+        // rejects the `cache-mode` key the module's configuration would have ignored (#27).
+        let unattended = cx
+            .answers_if_active(AGENT_GUARDRAILS)
+            .is_some_and(unattended::enabled);
+        let own_actionlint = brownfield::foreign_actionlint(cx);
+        let yaml = render::to_yaml(&workflow);
+        let actionlint_note = (!own_actionlint.is_empty()
+            && render::declares_cache_mode(&yaml, unattended))
+        .then(|| {
+            let file = if render::declares_cache_mode(&yaml, false) {
+                path
+            } else {
+                "a workflow brakes renders"
+            };
+            format!(
+                ".github/actionlint.yaml is the project's own and actionlint rejects the `cache-mode` key of {file} (rhysd/actionlint#762): add `{}` to the `ignore` of `paths: .github/workflows/**/*.{{yml,yaml}}`",
+                render::CACHE_MODE_IGNORE
+            )
+        });
         // A macOS-target app with macos off runs nowhere (#784): say so.
         let idle: Vec<String> = if answers.workflow == WorkflowMode::Generate && !answers.macos {
             crate::modules::stack_packs::required_packs(cx)?
@@ -385,6 +405,7 @@ impl Module for CiBaseline {
             .chain(evidence)
             .chain(capped)
             .chain(jobs)
+            .chain(actionlint_note)
             .collect())
     }
 }
