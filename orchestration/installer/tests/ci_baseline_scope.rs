@@ -871,6 +871,38 @@ fn a_new_workflow_made_only_of_pins_is_protected() {
 }
 
 #[test]
+/// #77: Git quotes a name holding a quote, a backslash or a tab; the scope job
+/// must match the name as written, not its quoted form.
+fn a_protected_file_whose_name_git_quotes_is_listed_as_written() {
+    for path in [
+        ".github/workflows/q\"x.yml",
+        ".github/workflows/b\\x.yml",
+        ".github/workflows/t\tx.yml",
+        ".github/workflows/é.yml",
+    ] {
+        let repo = Repo::with_base(BASE);
+        let base = repo.head();
+        let head = repo.commit(&[(path, "name: X\n")], &[], "odd");
+        let run = scope(&repo, pr(&base, &head));
+        assert_eq!(run.protected(), [path], "{path:?}");
+        assert_eq!(run.tier(), TIER_FULL, "{path:?}");
+    }
+}
+
+#[test]
+/// #77: a name holding a newline cannot be listed one per line, so the files
+/// count as unlisted and the gate fails closed.
+fn a_file_whose_name_holds_a_newline_means_the_files_cannot_be_listed() {
+    let repo = Repo::with_base(BASE);
+    let base = repo.head();
+    let head = repo.commit(&[("docs/a\nb.md", "x\n")], &[], "newline");
+    let run = scope(&repo, pr(&base, &head));
+    assert_eq!(run.protected(), ["<unknown>"]);
+    assert_eq!(run.tier(), TIER_FULL);
+    assert_eq!(run.outputs["skippable"], r#"["macos"]"#);
+}
+
+#[test]
 fn every_protected_change_is_listed_in_diff_order() {
     let repo = Repo::with_base(BASE);
     let base = repo.head();

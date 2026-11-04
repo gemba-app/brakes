@@ -50,15 +50,31 @@ emit() {
 #    The three-dot range compares the head with its merge base with the base, so
 #    what the base branch changed after the branch point is never this pull
 #    request's change (#1280); no merge base in the checkout fails the diff.
+#    Names are read NUL-separated, as written: Git would quote one holding a
+#    quote, a backslash or a tab (#77). A name holding a newline cannot be one
+#    line of the list, so the files count as not listed.
 tier=full
 diffed=false
 listed=false
 files=""
+names="$(mktemp)"
 if [ "$event" = pull_request ] && [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ] \
-  && files="$(git -c diff.renames=false -c core.quotePath=false diff --name-only "$BASE_SHA...$HEAD_SHA")"; then
+  && git -c diff.renames=false diff --name-only -z "$BASE_SHA...$HEAD_SHA" > "$names"; then
   diffed=true
+  while IFS= read -r -d '' file; do
+    case "$file" in
+      *$'\n'*)
+        diffed=false
+        files=""
+        break
+        ;;
+    esac
+    files="$files$file"$'\n'
+  done < "$names"
+  files=${files%$'\n'}
   [ -z "$files" ] || listed=true
 fi
+rm -f "$names"
 
 matches() {
   local glob

@@ -76,11 +76,24 @@ jobs:
           diffed=false
           listed=false
           files=""
+          names="$(mktemp)"
           if [ "$event" = pull_request ] && [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ] \
-            && files="$(git -c diff.renames=false -c core.quotePath=false diff --name-only "$BASE_SHA...$HEAD_SHA")"; then
+            && git -c diff.renames=false diff --name-only -z "$BASE_SHA...$HEAD_SHA" > "$names"; then
             diffed=true
+            while IFS= read -r -d '' file; do
+              case "$file" in
+                *$'\n'*)
+                  diffed=false
+                  files=""
+                  break
+                  ;;
+              esac
+              files="$files$file"$'\n'
+            done < "$names"
+            files=${files%$'\n'}
             [ -z "$files" ] || listed=true
           fi
+          rm -f "$names"
 
           matches() {
             local glob
