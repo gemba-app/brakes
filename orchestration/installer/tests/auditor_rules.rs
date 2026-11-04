@@ -458,8 +458,6 @@ const POSTURE: &[&str] = &[
     "posture.stale-branches",
     "posture.org-2fa-required",
     "posture.repo-admins-are-owners",
-    "posture.human-approval-required",
-    "posture.codeowners-review",
     "posture.serialised-merges",
     "posture.production-environment-guarded",
 ];
@@ -523,9 +521,9 @@ fn a_lasting_error_is_read_once_and_a_passing_one_again() {
             &outcome(&audit, "posture.serialised-merges"),
             &passing.message,
         );
-        // Seven ruleset and protection rules (six of posture and
+        // Five ruleset and protection rules (four of posture and
         // ci.required-is-aggregate), each reading both sources again.
-        assert_eq!(host.count("branch_protection"), 7, "{:?}", host.calls);
+        assert_eq!(host.count("branch_protection"), 5, "{:?}", host.calls);
     }
 }
 
@@ -564,8 +562,6 @@ fn posture_rules_are_required_in_every_profile_or_as_allocated() {
     // leaves one out; the natural not-required outcomes are tested with their rule.
     let rule = |id: &str| REGISTRY.iter().find(|r| r.id == id).expect(id);
     let by_dimension = [
-        "posture.human-approval-required",
-        "posture.codeowners-review",
         "posture.repo-admins-are-owners",
         "posture.serialised-merges",
     ];
@@ -574,9 +570,9 @@ fn posture_rules_are_required_in_every_profile_or_as_allocated() {
             assert!(dims(profile).requires(rule(id)), "{id} in {profile:?}");
         }
     }
-    // Formal approvals only with more than one human (P2, P3); serialised
+    // Admin ownership only with more than one human (P2, P3); serialised
     // merges by cadence, whatever the profile.
-    for id in &by_dimension[..3] {
+    for id in &by_dimension[..1] {
         assert!(!dims(Profile::P1).requires(rule(id)), "{id} in P1");
         assert!(dims(Profile::P2).requires(rule(id)), "{id} in P2");
         assert!(dims(Profile::P3).requires(rule(id)), "{id} in P3");
@@ -870,14 +866,8 @@ fn a_malformed_inventory_leaves_bypass_actors_unverified() {
     );
 }
 
-// --- posture.human-approval-required ------------------------------------------------
+// --- review rulesets --------------------------------------------------------------
 
-fn reviewed(count: u32) -> BranchProtection {
-    BranchProtection {
-        required_approving_review_count: Some(count),
-        ..protection(Some(false), Some(false))
-    }
-}
 fn pull_request_ruleset(parameters: serde_json::Value) -> Ruleset {
     let mut r = ruleset(7, &["pull_request"]);
     r.required_approving_review_count = parameters["required_approving_review_count"]
@@ -886,180 +876,6 @@ fn pull_request_ruleset(parameters: serde_json::Value) -> Ruleset {
     r.rule_parameters
         .insert("pull_request".to_owned(), parameters);
     r
-}
-
-#[test]
-fn an_approving_review_required_by_classic_protection_passes() {
-    let host = FakeHost {
-        protection: Ok(Some(reviewed(1))),
-        rulesets: Ok(Vec::new()),
-        ..FakeHost::default()
-    };
-    passed(
-        &outcome(&run(&host), "posture.human-approval-required"),
-        &["classic protection of main requires 1 approving review"],
-    );
-}
-
-#[test]
-fn approving_reviews_required_by_a_ruleset_pass_even_when_protection_is_unreadable() {
-    let host = FakeHost {
-        protection: Err(HostError::new(HostErrorKind::Forbidden, "no admin")),
-        rulesets: Ok(vec![pull_request_ruleset(
-            serde_json::json!({"required_approving_review_count": 2}),
-        )]),
-        ..FakeHost::default()
-    };
-    passed(
-        &outcome(&run(&host), "posture.human-approval-required"),
-        &["ruleset main (7) requires 2 approving reviews on main"],
-    );
-}
-
-#[test]
-fn zero_approving_reviews_fail_naming_each_source() {
-    let host = FakeHost {
-        protection: Ok(Some(reviewed(0))),
-        rulesets: Ok(vec![pull_request_ruleset(
-            serde_json::json!({"required_approving_review_count": 0}),
-        )]),
-        ..FakeHost::default()
-    };
-    failed(
-        &outcome(&run(&host), "posture.human-approval-required"),
-        &[
-            "classic protection of main requires no approving review",
-            "no active ruleset requires an approving review on main",
-        ],
-    );
-}
-
-#[test]
-fn approval_rules_refused_by_plan_on_both_sources_require_plan_team() {
-    let host = FakeHost {
-        protection: Err(plan_refused(PROTECTION_PLAN_403)),
-        rulesets: Err(plan_refused(PLAN_403)),
-        ..FakeHost::default()
-    };
-    let audit = run_as(&host, &[], Profile::P2);
-    for id in [
-        "posture.human-approval-required",
-        "posture.codeowners-review",
-        "posture.serialised-merges",
-    ] {
-        unavailable(&outcome(&audit, id), "requires plan Team");
-    }
-}
-
-#[test]
-fn approval_with_an_org_admin_pull_request_bypass_passes_and_names_the_bypass() {
-    let mut rs = pull_request_ruleset(serde_json::json!({"required_approving_review_count": 1}));
-    rs.bypass_actors = vec!["OrganizationAdmin:1:pull_request".to_owned()];
-    let host = FakeHost {
-        protection: Ok(None),
-        rulesets: Ok(vec![rs]),
-        ..FakeHost::default()
-    };
-    passed(
-        &outcome(&run(&host), "posture.human-approval-required"),
-        &[
-            "ruleset main (7) requires 1 approving review on main; bypassed by OrganizationAdmin:1:pull_request",
-        ],
-    );
-}
-
-// --- a single maintainer (#34) ------------------------------------------------------
-
-/// Neither approvals nor code owner review on main, classic or ruleset.
-fn unreviewed() -> FakeHost {
-    FakeHost {
-        protection: Ok(Some(reviewed(0))),
-        rulesets: Ok(Vec::new()),
-        ..FakeHost::default()
-    }
-}
-
-#[test]
-fn a_single_measured_maintainer_is_not_required_an_approval_nobody_else_can_give() {
-    let audit = run_measured(
-        &unreviewed(),
-        &[],
-        &Dimensions {
-            humans: Some(1),
-            ..dims(Profile::P1)
-        },
-    );
-    for id in [
-        "posture.human-approval-required",
-        "posture.codeowners-review",
-    ] {
-        let e = audit.rules.iter().find(|e| e.rule.id == id).unwrap();
-        assert!(!e.required, "{id}");
-        assert_eq!(e.outcome.status, Status::NotRequired, "{id}");
-        assert_eq!(
-            e.outcome.reason.as_deref(),
-            Some("single maintainer: nobody else can approve"),
-            "{id}"
-        );
-        assert!(e.outcome.evidence.is_empty(), "{id}");
-    }
-}
-
-#[test]
-fn two_measured_maintainers_are_judged_on_approvals_as_before() {
-    let audit = run_measured(
-        &unreviewed(),
-        &[],
-        &Dimensions {
-            humans: Some(2),
-            ..dims(Profile::P2)
-        },
-    );
-    let required = |id| {
-        audit
-            .rules
-            .iter()
-            .find(|e| e.rule.id == id)
-            .unwrap()
-            .required
-    };
-    assert!(required("posture.human-approval-required"));
-    assert!(required("posture.codeowners-review"));
-    failed(
-        &outcome(&audit, "posture.human-approval-required"),
-        &[
-            "classic protection of main requires no approving review",
-            "no active ruleset requires an approving review on main",
-        ],
-    );
-    failed(
-        &outcome(&audit, "posture.codeowners-review"),
-        &[
-            "classic protection of main does not require code owner review",
-            "no active ruleset requires code owner review on main",
-        ],
-    );
-}
-
-#[test]
-fn an_unmeasured_or_zero_humans_count_judges_approvals_as_before() {
-    for humans in [None, Some(0)] {
-        let audit = run_measured(
-            &unreviewed(),
-            &[],
-            &Dimensions {
-                humans,
-                ..dims(Profile::P1)
-            },
-        );
-        failed(
-            &outcome(&audit, "posture.human-approval-required"),
-            &[
-                "classic protection of main requires no approving review",
-                "no active ruleset requires an approving review on main",
-            ],
-        );
-    }
 }
 
 // --- split rulesets: checks without bypass, review with it (#1218) ------------------
@@ -1095,12 +911,6 @@ fn split_rulesets_prove_the_check_unbypassed_and_the_approval_with_its_bypass_na
     passed(
         &outcome(&audit, "posture.required-check-enforced"),
         &["ruleset baseline (41) requires check required on main"],
-    );
-    passed(
-        &outcome(&audit, "posture.human-approval-required"),
-        &[
-            "ruleset review (42) requires 1 approving review on main; bypassed by OrganizationAdmin:1:pull_request",
-        ],
     );
     passed(
         &outcome(&audit, "posture.no-unlisted-bypass-actors"),
@@ -1245,62 +1055,6 @@ fn repo_admins_are_owners_is_a_silver_rule_of_teams() {
     assert!(dims(Profile::P2).requires(rule));
     assert!(dims(Profile::P3).requires(rule));
     assert_eq!(allowance(rule.id), 2);
-}
-
-// --- posture.codeowners-review --------------------------------------------------------
-
-#[test]
-fn code_owner_review_required_by_classic_protection_passes() {
-    let host = FakeHost {
-        protection: Ok(Some(BranchProtection {
-            require_code_owner_reviews: Some(true),
-            ..reviewed(1)
-        })),
-        rulesets: Ok(Vec::new()),
-        ..FakeHost::default()
-    };
-    passed(
-        &outcome(&run(&host), "posture.codeowners-review"),
-        &["classic protection of main requires code owner review"],
-    );
-}
-
-#[test]
-fn code_owner_review_required_by_a_ruleset_passes() {
-    let host = FakeHost {
-        protection: Ok(None),
-        rulesets: Ok(vec![pull_request_ruleset(serde_json::json!({
-            "required_approving_review_count": 1,
-            "require_code_owner_review": true
-        }))]),
-        ..FakeHost::default()
-    };
-    passed(
-        &outcome(&run(&host), "posture.codeowners-review"),
-        &["ruleset main (7) requires code owner review on main"],
-    );
-}
-
-#[test]
-fn without_code_owner_review_the_rule_fails_naming_each_source() {
-    let host = FakeHost {
-        protection: Ok(Some(BranchProtection {
-            require_code_owner_reviews: Some(false),
-            ..reviewed(1)
-        })),
-        rulesets: Ok(vec![pull_request_ruleset(serde_json::json!({
-            "required_approving_review_count": 1,
-            "require_code_owner_review": false
-        }))]),
-        ..FakeHost::default()
-    };
-    failed(
-        &outcome(&run(&host), "posture.codeowners-review"),
-        &[
-            "classic protection of main does not require code owner review",
-            "no active ruleset requires code owner review on main",
-        ],
-    );
 }
 
 // --- posture.serialised-merges --------------------------------------------------------
@@ -2106,8 +1860,6 @@ static POSTURE_RULES: &[Rule] = &[
     posture::NO_REPO_SECRETS_WITH_PRODUCTION,
     posture::STALE_BRANCHES,
     posture::ORG_2FA_REQUIRED,
-    posture::HUMAN_APPROVAL_REQUIRED,
-    posture::CODEOWNERS_REVIEW,
     posture::SERIALISED_MERGES,
     posture::PRODUCTION_ENVIRONMENT_GUARDED,
 ];
@@ -2261,22 +2013,7 @@ fn example_app_recorded_posture() {
         outcome(&audit, "posture.actions-pinned").status,
         Status::Failed
     );
-    // #889: classic protection with zero reviews and no code owner review,
-    // strict required checks, production limited to main.
-    failed(
-        &outcome(&audit, "posture.human-approval-required"),
-        &[
-            "classic protection of main requires no approving review",
-            "no active ruleset requires an approving review on main",
-        ],
-    );
-    failed(
-        &outcome(&audit, "posture.codeowners-review"),
-        &[
-            "classic protection of main does not require code owner review",
-            "no active ruleset requires code owner review on main",
-        ],
-    );
+    // #889: strict required checks, production limited to main.
     passed(
         &outcome(&audit, "posture.serialised-merges"),
         &["classic protection of main requires branches up to date before merging"],
@@ -2320,13 +2057,6 @@ fn a_repository_without_ci_recorded_posture() {
     assert_eq!(
         o.reason.as_deref(),
         Some("no workflow under .github/workflows")
-    );
-    failed(
-        &outcome(&audit, "posture.human-approval-required"),
-        &[
-            "main has no classic protection",
-            "no active ruleset requires an approving review on main",
-        ],
     );
     failed(
         &outcome(&audit, "posture.serialised-merges"),
@@ -3065,8 +2795,6 @@ static EXAMPLE_APP_REMOTE_BLOCKS: &[Rule] = &[
     posture::NO_REPO_SECRETS_WITH_PRODUCTION,
     posture::STALE_BRANCHES,
     posture::ORG_2FA_REQUIRED,
-    posture::HUMAN_APPROVAL_REQUIRED,
-    posture::CODEOWNERS_REVIEW,
     posture::SERIALISED_MERGES,
     posture::PRODUCTION_ENVIRONMENT_GUARDED,
     ci_health::WORKFLOW_EXISTS,
@@ -4630,18 +4358,25 @@ fn example_app_recorded_postmortem_actions() {
 }
 
 #[test]
-fn formal_approval_and_ownership_are_never_required_at_p1_and_always_at_p2() {
+fn ownership_is_never_required_at_p1_and_always_at_p2() {
+    let id = "governance.codeowners-present";
+    let rule = REGISTRY
+        .iter()
+        .find(|r| r.id == id)
+        .unwrap_or_else(|| panic!("{id} not in the registry"));
+    assert!(!dims(Profile::P1).requires(rule), "{id} at P1");
+    assert!(dims(Profile::P2).requires(rule), "{id} at P2");
+}
+
+#[test]
+/// Decision 2026-11-03 "Only a critical change waits for a person": no rule asks
+/// for an approving review on every pull request.
+fn no_rule_requires_an_approving_review_on_every_pull_request() {
     for id in [
         "posture.human-approval-required",
         "posture.codeowners-review",
-        "governance.codeowners-present",
     ] {
-        let rule = REGISTRY
-            .iter()
-            .find(|r| r.id == id)
-            .unwrap_or_else(|| panic!("{id} not in the registry"));
-        assert!(!dims(Profile::P1).requires(rule), "{id} at P1");
-        assert!(dims(Profile::P2).requires(rule), "{id} at P2");
+        assert!(REGISTRY.iter().all(|r| r.id != id), "{id} is still a rule");
     }
 }
 

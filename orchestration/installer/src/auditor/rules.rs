@@ -304,8 +304,6 @@ pub static REGISTRY: &[Rule] = &[
     posture::NO_OPEN_SECRET_SCANNING_ALERTS,
     posture::REQUIRED_CHECK_ENFORCED,
     posture::NO_UNLISTED_BYPASS_ACTORS,
-    posture::HUMAN_APPROVAL_REQUIRED,
-    posture::CODEOWNERS_REVIEW,
     posture::SERIALISED_MERGES,
     posture::ACTIONS_PINNED,
     posture::NO_STALE_CRITICAL_ALERTS,

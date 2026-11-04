@@ -51,8 +51,9 @@ jobs:
             .github/workflows/**
             .github/rulesets/**
             .github/CODEOWNERS
-            .agent-setup/lock.json
+            .agent-setup/project.json
             tests/heldout/**
+          REPOSITORY_OWNER: "${{ github.repository_owner }}"
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
@@ -178,12 +179,84 @@ jobs:
           if [ -n "$negated" ]; then
             echo "::warning::protected_paths carries a negation (${negated# }); negations are never evaluated and protect nothing less"
           fi
+          pin_re='^( *(- )?use[s]: *)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(/[A-Za-z0-9_./-]+)?@([0-9a-f]{40}) +# *(v?[0-9]{1,9}(\.[0-9]{1,9})*) *$'
+
+          is_tag_commit() {
+            local refs sha ref direct="" peeled=""
+            refs="$(GIT_TERMINAL_PROMPT=0 git ls-remote --tags "https://github.com/$1" "refs/tags/$2" "refs/tags/$2^{}" 2>/dev/null)" || return 1
+            while IFS=$'\t' read -r sha ref; do
+              [ "$ref" = "refs/tags/$2" ] && direct=$sha
+              [ "$ref" = "refs/tags/$2^{}" ] && peeled=$sha
+            done <<< "$refs"
+            [ -z "$peeled" ] || direct=$peeled
+            [ -n "$direct" ] && [ "$direct" = "$3" ]
+          }
+
+          is_newer_release() {
+            local new=${1#v} old=${2#v} a b
+            while [ -n "$new" ] || [ -n "$old" ]; do
+              a=${new%%.*}
+              b=${old%%.*}
+              a=$((10#${a:-0}))
+              b=$((10#${b:-0}))
+              [ "$a" -gt "$b" ] && return 0
+              [ "$a" -lt "$b" ] && return 1
+              case "$new" in *.*) new=${new#*.} ;; *) new="" ;; esac
+              case "$old" in *.*) old=${old#*.} ;; *) old="" ;; esac
+            done
+            return 1
+          }
+
+          is_pin_pair() {
+            local LC_ALL=C prefix action old_tag owner self
+            [ -n "${REPOSITORY_OWNER:-}" ] || return 1
+            [[ $1 =~ $pin_re ]] || return 1
+            prefix=${BASH_REMATCH[1]}
+            action=${BASH_REMATCH[3]}${BASH_REMATCH[4]}
+            old_tag=${BASH_REMATCH[6]}
+            [[ $2 =~ $pin_re ]] || return 1
+            [ "${BASH_REMATCH[1]}" = "$prefix" ] || return 1
+            [ "${BASH_REMATCH[3]}${BASH_REMATCH[4]}" = "$action" ] || return 1
+            owner="$(printf '%s' "${action%%/*}" | tr '[:upper:]' '[:lower:]')"
+            self="$(printf '%s' "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+            [ "$owner" != "$self" ] || return 1
+            is_newer_release "${BASH_REMATCH[6]}" "$old_tag" || return 1
+            is_tag_commit "${BASH_REMATCH[3]}" "${BASH_REMATCH[6]}" "${BASH_REMATCH[5]}"
+          }
+
+          is_pin_bump() {
+            local diff line pending="" old hunk=false
+            diff="$(git -c diff.renames=false -c core.quotePath=false diff -U0 --no-color --no-ext-diff "$BASE_SHA...$HEAD_SHA" -- "$1")" || return 1
+            [ -n "$diff" ] || return 1
+            while IFS= read -r line; do
+              if ! $hunk; then
+                case "$line" in
+                  'diff --git '* | 'index '* | '--- a/'* | '+++ b/'*) continue ;;
+                  '@@ '*) hunk=true; continue ;;
+                  *) return 1 ;;
+                esac
+              fi
+              case "$line" in
+                '@@ '*) [ -z "$pending" ] || return 1 ;;
+                -*) pending="$pending${line#-}"$'\n' ;;
+                +*)
+                  [ -n "$pending" ] || return 1
+                  old=${pending%%$'\n'*}
+                  pending=${pending#*$'\n'}
+                  is_pin_pair "$old" "${line#+}" || return 1
+                  ;;
+                *) return 1 ;;
+              esac
+            done <<< "$diff"
+            $hunk && [ -z "$pending" ]
+          }
+
           changed_protected=""
           if [ "$event" = pull_request ] && ! $diffed; then
             changed_protected='<unknown>'$'\n'
           elif $listed; then
             while IFS= read -r file; do
-              if matches "$file" "$protected_paths"; then
+              if matches "$file" "$protected_paths" && ! is_pin_bump "$file"; then
                 changed_protected="$changed_protected$file"$'\n'
               fi
             done <<< "$files"

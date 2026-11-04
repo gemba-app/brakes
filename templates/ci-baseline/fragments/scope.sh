@@ -10,6 +10,8 @@
 #   EVENT           github.event_name
 #   BASE_SHA        github.event.pull_request.base.sha (empty outside pull requests)
 #   HEAD_SHA        github.event.pull_request.head.sha
+#   REPOSITORY_OWNER github.repository_owner; an action of this owner is never
+#                   a routine pin bump, and none is without it
 #   INERT_PATHS     prefix globs (`docs/**`, `**/*.md`); a change made only of
 #                   these is tier `docs`; `.github/workflows/**` is never inert;
 #                   a negation is never evaluated and keeps `full`
@@ -19,12 +21,15 @@
 #                   every app runs every app
 #   PROTECTED_PATHS prefix globs whose change in a pull request needs the
 #                   `human-approved` label; a protected path is never inert; a
-#                   negation is never evaluated and protects nothing less
+#                   negation is never evaluated and protects nothing less; a
+#                   change made only of action pins moved to the commits of
+#                   their tags is routine and not listed (decision 2026-11-03)
 #   GITHUB_OUTPUT   the step output file
 # Outputs, written to $GITHUB_OUTPUT and printed on stdout as the same lines:
 #   tier=full|docs
 #   skippable=<JSON array of job ids>
-#   protected=<JSON array of changed protected paths>; `["<unknown>"]` when a
+#   protected=<JSON array of changed protected paths but the pin bumps>;
+#             `["<unknown>"]` when a
 #             pull request's files cannot be listed; `[]` outside pull requests
 #   changed-<id>=true|false   one per app, in APPS order
 set -euo pipefail
@@ -164,12 +169,97 @@ done <<< "$protected_paths"
 if [ -n "$negated" ]; then
   echo "::warning::protected_paths carries a negation (${negated# }); negations are never evaluated and protect nothing less"
 fi
+# A pin line: `uses: <owner>/<repo>[/<path>]@<40-hex commit> # <release tag>`,
+# blanks being spaces only: YAML starts a comment at ` #` and nowhere else.
+pin_re='^( *(- )?use[s]: *)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(/[A-Za-z0-9_./-]+)?@([0-9a-f]{40}) +# *(v?[0-9]{1,9}(\.[0-9]{1,9})*) *$'
+
+# True when the code host's tag `$2` of `$1` names the commit `$3`; an annotated
+# tag counts by the commit it peels to. No answer is no.
+is_tag_commit() {
+  local refs sha ref direct="" peeled=""
+  refs="$(GIT_TERMINAL_PROMPT=0 git ls-remote --tags "https://github.com/$1" "refs/tags/$2" "refs/tags/$2^{}" 2>/dev/null)" || return 1
+  while IFS=$'\t' read -r sha ref; do
+    [ "$ref" = "refs/tags/$2" ] && direct=$sha
+    [ "$ref" = "refs/tags/$2^{}" ] && peeled=$sha
+  done <<< "$refs"
+  [ -z "$peeled" ] || direct=$peeled
+  [ -n "$direct" ] && [ "$direct" = "$3" ]
+}
+
+# True when the release `$1` is strictly above the release `$2`, number by
+# number (`v1.10` above `v1.9`; a missing number counts as 0).
+is_newer_release() {
+  local new=${1#v} old=${2#v} a b
+  while [ -n "$new" ] || [ -n "$old" ]; do
+    a=${new%%.*}
+    b=${old%%.*}
+    a=$((10#${a:-0}))
+    b=$((10#${b:-0}))
+    [ "$a" -gt "$b" ] && return 0
+    [ "$a" -lt "$b" ] && return 1
+    case "$new" in *.*) new=${new#*.} ;; *) new="" ;; esac
+    case "$old" in *.*) old=${old#*.} ;; *) old="" ;; esac
+  done
+  return 1
+}
+
+# True when `$2` replaces the pin `$1` of an action with a pin of the same
+# action, at the same place, on a newer release whose tag names that commit in
+# the action's own repository. An action of this repository's owner never is:
+# the owner can make its tags name anything.
+is_pin_pair() {
+  local LC_ALL=C prefix action old_tag owner self
+  [ -n "${REPOSITORY_OWNER:-}" ] || return 1
+  [[ $1 =~ $pin_re ]] || return 1
+  prefix=${BASH_REMATCH[1]}
+  action=${BASH_REMATCH[3]}${BASH_REMATCH[4]}
+  old_tag=${BASH_REMATCH[6]}
+  [[ $2 =~ $pin_re ]] || return 1
+  [ "${BASH_REMATCH[1]}" = "$prefix" ] || return 1
+  [ "${BASH_REMATCH[3]}${BASH_REMATCH[4]}" = "$action" ] || return 1
+  owner="$(printf '%s' "${action%%/*}" | tr '[:upper:]' '[:lower:]')"
+  self="$(printf '%s' "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+  [ "$owner" != "$self" ] || return 1
+  is_newer_release "${BASH_REMATCH[6]}" "$old_tag" || return 1
+  is_tag_commit "${BASH_REMATCH[3]}" "${BASH_REMATCH[6]}" "${BASH_REMATCH[5]}"
+}
+
+# True when this pull request's change to the existing file `$1` is made only of
+# pin pairs, each removed line followed in its hunk by the line replacing it. A
+# new, deleted, renamed or mode-changed file, or any other line, is not a bump.
+is_pin_bump() {
+  local diff line pending="" old hunk=false
+  diff="$(git -c diff.renames=false -c core.quotePath=false diff -U0 --no-color --no-ext-diff "$BASE_SHA...$HEAD_SHA" -- "$1")" || return 1
+  [ -n "$diff" ] || return 1
+  while IFS= read -r line; do
+    if ! $hunk; then
+      case "$line" in
+        'diff --git '* | 'index '* | '--- a/'* | '+++ b/'*) continue ;;
+        '@@ '*) hunk=true; continue ;;
+        *) return 1 ;;
+      esac
+    fi
+    case "$line" in
+      '@@ '*) [ -z "$pending" ] || return 1 ;;
+      -*) pending="$pending${line#-}"$'\n' ;;
+      +*)
+        [ -n "$pending" ] || return 1
+        old=${pending%%$'\n'*}
+        pending=${pending#*$'\n'}
+        is_pin_pair "$old" "${line#+}" || return 1
+        ;;
+      *) return 1 ;;
+    esac
+  done <<< "$diff"
+  $hunk && [ -z "$pending" ]
+}
+
 changed_protected=""
 if [ "$event" = pull_request ] && ! $diffed; then
   changed_protected='<unknown>'$'\n'
 elif $listed; then
   while IFS= read -r file; do
-    if matches "$file" "$protected_paths"; then
+    if matches "$file" "$protected_paths" && ! is_pin_bump "$file"; then
       changed_protected="$changed_protected$file"$'\n'
     fi
   done <<< "$files"

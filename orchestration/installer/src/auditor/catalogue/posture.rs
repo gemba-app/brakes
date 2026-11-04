@@ -27,16 +27,11 @@ const ALL: Required = Required {
     profiles: &[Profile::P1, Profile::P2, Profile::P3],
     when: &[],
 };
-/// Formal approvals: with one human another approval adds nothing.
+/// Teams: rules that only mean something with more than one person.
 const TEAMS: Required = Required {
     profiles: &[Profile::P2, Profile::P3],
     when: &[],
 };
-/// The reason the approval rules give a repository with exactly one human with
-/// merge rights: GitHub does not let a pull request's author approve it (#34).
-pub const SINGLE_MAINTAINER: &str = "single maintainer: nobody else can approve";
-/// The rules that need an approval from a human other than the author.
-pub const NEEDS_ANOTHER_HUMAN: [&str; 2] = [HUMAN_APPROVAL_REQUIRED.id, CODEOWNERS_REVIEW.id];
 /// Cadence rules, whatever the profile.
 const CADENCE_MID: Required = Required {
     profiles: &[],
@@ -131,38 +126,6 @@ pub const NO_UNLISTED_BYPASS_ACTORS: Rule = Rule {
     plan: Some(Plan::Team),
     feasible_by: Milestone::Nov7,
     evaluate: no_unlisted_bypass_actors,
-};
-
-pub const HUMAN_APPROVAL_REQUIRED: Rule = Rule {
-    id: "posture.human-approval-required",
-    title: "Approving review required",
-    block: Block::Posture,
-    checks: "Classic protection or an active ruleset requires at least one approving review before merging to the default branch.",
-    how: Probe::Remote {
-        id: "branch-protection+rulesets",
-    },
-    level: Level::Bronze,
-    required: TEAMS,
-    remediation: RULESET_REMEDIATION,
-    plan: Some(Plan::Team),
-    feasible_by: Milestone::Nov7,
-    evaluate: human_approval_required,
-};
-
-pub const CODEOWNERS_REVIEW: Rule = Rule {
-    id: "posture.codeowners-review",
-    title: "Code owner review required",
-    block: Block::Posture,
-    checks: "Classic protection or an active ruleset requires a code owner's review before merging to the default branch.",
-    how: Probe::Remote {
-        id: "branch-protection+rulesets",
-    },
-    level: Level::Bronze,
-    required: TEAMS,
-    remediation: RULESET_REMEDIATION,
-    plan: Some(Plan::Team),
-    feasible_by: Milestone::Nov7,
-    evaluate: codeowners_review,
 };
 
 pub const SERIALISED_MERGES: Rule = Rule {
@@ -639,41 +602,6 @@ fn no_unlisted_bypass_actors(cx: &Cx<'_>) -> Outcome {
     )
 }
 
-fn human_approval_required(cx: &Cx<'_>) -> Outcome {
-    let guard = Guard::read(cx);
-    let branch = &guard.branch;
-    let reviews = |n: u32| match n {
-        1 => "1 approving review".to_owned(),
-        n => format!("{n} approving reviews"),
-    };
-    proved_by(
-        &guard,
-        |p| match p.required_approving_review_count.unwrap_or(0) {
-            0 => Err(format!(
-                "classic protection of {branch} requires no approving review"
-            )),
-            n => Ok(format!(
-                "classic protection of {branch} requires {}",
-                reviews(n)
-            )),
-        },
-        |r| {
-            r.required_approving_review_count
-                .filter(|n| *n > 0)
-                .map(|n| {
-                    let proof = format!("ruleset {} requires {} on {branch}", label(r), reviews(n));
-                    // A bypass is shown, never hidden behind the pass (#1218).
-                    if r.bypass_actors.is_empty() {
-                        proof
-                    } else {
-                        format!("{proof}; bypassed by {}", r.bypass_actors.join(", "))
-                    }
-                })
-        },
-        format!("no active ruleset requires an approving review on {branch}"),
-    )
-}
-
 /// A repository admin can edit or disable the ruleset in the UI; the
 /// capability is reported, not only its effects (#1218).
 fn repo_admins_are_owners(cx: &Cx<'_>) -> Outcome {
@@ -726,34 +654,6 @@ fn repo_admins_are_owners(cx: &Cx<'_>) -> Outcome {
     Outcome::passed(
         ok.iter()
             .map(|login| format!("{login} has admin on {repo} and {is}")),
-    )
-}
-
-fn codeowners_review(cx: &Cx<'_>) -> Outcome {
-    let guard = Guard::read(cx);
-    let branch = &guard.branch;
-    proved_by(
-        &guard,
-        |p| {
-            if p.require_code_owner_reviews == Some(true) {
-                Ok(format!(
-                    "classic protection of {branch} requires code owner review"
-                ))
-            } else {
-                Err(format!(
-                    "classic protection of {branch} does not require code owner review"
-                ))
-            }
-        },
-        |r| {
-            (parameter(r, "pull_request", "require_code_owner_review") == true).then(|| {
-                format!(
-                    "ruleset {} requires code owner review on {branch}",
-                    label(r)
-                )
-            })
-        },
-        format!("no active ruleset requires code owner review on {branch}"),
     )
 }
 

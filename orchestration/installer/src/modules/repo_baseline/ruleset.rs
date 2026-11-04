@@ -4,7 +4,9 @@
 //!
 //! Policy fixed by the owner (decision 2026-10-28, point 7): P1 `checks-only`
 //! with no bypass actors, administrators included; P2 and P3 `one-approval`
-//! with no bypass actors; agent identities are never bypass actors. The
+//! with no bypass actors; agent identities are never bypass actors. Amended
+//! 2026-11-03: every profile defaults to `checks-only` and only a critical
+//! change waits for a person; a team answers `one-approval`. The
 //! repository-admin bypass exists as the P1 answer `checks-only-owner-bypass`,
 //! which the auditor records as a standing exception. Amended 2026-10-31
 //! (#1218): any profile may declare bypass actors in `bypass_actors`, within
@@ -113,8 +115,10 @@ impl Answers {
                 codeowners: false,
                 bypass_actors: Vec::new(),
             },
+            // Decision 2026-11-03: green merges in every profile; a team that
+            // wants a review on every pull request answers `one-approval`.
             Tier::P2 | Tier::P3 => Answers {
-                approvals: Approvals::OneApproval,
+                approvals: Approvals::ChecksOnly,
                 codeowners: true,
                 bypass_actors: Vec::new(),
             },

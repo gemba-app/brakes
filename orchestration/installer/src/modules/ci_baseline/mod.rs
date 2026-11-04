@@ -78,7 +78,7 @@ pub fn schema() -> Schema {
         {"id": "heldout_command", "type": "string",
          "description": "The full command that runs only the held-out tests; required when `heldout` is answered true or `heldout_dir` holds a file, never invented."},
         {"id": "protected_paths", "type": "array", "items": {"type": "string"},
-         "description": "Paths whose change in a pull request needs the `human-approved` label before `required` passes; default: the workflows, rulesets, CODEOWNERS, the lock and `<heldout_dir>/**`."},
+         "description": "Paths whose change in a pull request needs the `human-approved` label before `required` passes; default, only what is critical: the workflows, rulesets, CODEOWNERS, `.agent-setup/project.json` and `<heldout_dir>/**`; a workflow change made only of action pins moved to the commits of their tags needs no label."},
         {"id": "heldout_properties", "type": "boolean", "default": false,
          "description": "Adds the `heldout-properties` job: property-based tests under `heldout_dir` with a fresh recorded seed; read only when `heldout`."},
         {"id": "heldout_properties_command", "type": "string",

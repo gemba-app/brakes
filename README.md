@@ -238,9 +238,9 @@ configuration, writes and remote reads need one. A repository declares its comma
 | 1 | CI required on every pull request | `ci-baseline` | your CI, seeded once by `brakes ci init` or your own, audited by `doctor --propose`; its aggregate `required` and the judges' `agentic-required` are both required |
 | 2 | Protected default branch, no bypass for administrators | `repo-baseline` | a ruleset with `enforcement: active` and no bypass actors, applied with `apply --remote` |
 | 3 | Never merge on red, also locally | `merge-guard` | the `guard pre-bash` hook for the agent host, light and full mode |
-| 4 | Touching CI needs approval | `repo-baseline`, `ci-baseline` | CODEOWNERS over `.github/workflows/` with code-owner review in the ruleset; protected paths that need the `human-approved` label |
+| 4 | Only a critical change needs a person | `ci-baseline` | protected paths (the workflows, the ruleset, CODEOWNERS, the project commands, the held-out tests) need the `human-approved` label, except an action bump verified against its tag; every other pull request merges on green |
 | 5 | Cross-family model review as a gate | `agent-guardrails` | a review by another model family, in two jobs, inside the aggregate |
-| 6 | Human review when the team has more than one person | `repo-baseline` | the review count of the ruleset, from the repository's profile |
+| 6 | Human review, when a team asks for it | `repo-baseline` | the review count of the ruleset: 0 by default in every profile, 1 when `approvals` is answered `one-approval` |
 | 7 | Held-out tests | `ci-baseline`, `agent-guardrails` | a held-out directory and job, denied to agents for reading and editing |
 | 8 | Coverage over changed lines | `security`, `stack-packs` | your test job uploads its coverage data with the stack pack's recipe; `agentic-coverage.yml` judges it against the merge base and runs no test |
 | 9 | Characterisation tests before touching old code | `security` | the same job fails a change to a file no test executed |
@@ -284,7 +284,7 @@ machine and in CI.
 | Scorecard check | In `brakes` |
 |---|---|
 | Binary-Artifacts | `security.binary-artifacts`, the same detection |
-| Branch-Protection | brakes 2 and 6: the ruleset `brakes` writes, audited by `posture.default-branch-protected`, `posture.required-check-enforced`, `posture.no-unlisted-bypass-actors`, `posture.human-approval-required` |
+| Branch-Protection | brakes 2 and 6: the ruleset `brakes` writes, audited by `posture.default-branch-protected`, `posture.required-check-enforced`, `posture.no-unlisted-bypass-actors` |
 | CI-Tests | brake 1: one aggregate required check over the declared commands (`ci.aggregate-present`, `ci.required-is-aggregate`) |
 | Code-Review | brake 6 for human review; brake 5 adds a review by another model family as a required check. Scorecard counts neither bot nor AI reviews, and in `brakes` the model review is added to human review, never a substitute |
 | Dangerous-Workflow | brake 17: zizmor in `workflow-lint`, `agents.workflow-injection` |

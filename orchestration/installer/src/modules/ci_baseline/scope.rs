@@ -57,11 +57,16 @@ pub const DEFAULT_HELDOUT_DIR: &str = "tests/heldout";
 /// `model.rs` appends its screenshot baselines to the unanswered default
 /// (`<web_dir>/*-snapshots/**`, `**/*-snapshots/**` at the root, one per app;
 /// `qa::protected`, #1005).
+/// Only a critical change waits for a person (decision 2026-11-03): any
+/// workflow (it may produce a required check or publish), the ruleset, the
+/// owners, the project commands the checks run and the held-out tests. The lock
+/// merges on green, and so does a workflow change made only of action pins moved
+/// to the commits of their tags (`is_pin_bump` in the fragment).
 pub const DEFAULT_PROTECTED_PATHS: &[&str] = &[
     ".github/workflows/**",
     ".github/rulesets/**",
     ".github/CODEOWNERS",
-    ".agent-setup/lock.json",
+    ".agent-setup/project.json",
     "tests/heldout/**",
 ];
 
@@ -89,6 +94,7 @@ pub const INPUTS: &[(&str, &str)] = &[
     ("EVENT", "github.event_name"),
     ("BASE_SHA", "github.event.pull_request.base.sha"),
     ("HEAD_SHA", "github.event.pull_request.head.sha"),
+    ("REPOSITORY_OWNER", "github.repository_owner"),
     (
         "INERT_PATHS",
         "the inert_paths answer, one prefix glob per line",

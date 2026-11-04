@@ -4,6 +4,46 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## Only a critical change waits for a person; every other pull request merges on green — 2026-11-03
+
+Decided by the owner. Context: with the label on every workflow, the lock and every action
+bump, and one approval on every pull request in P2 and P3, a person was asked to approve
+changes the tool itself generated: SHA bumps, a regenerated lock, a release. In a repository
+with one maintainer nobody can give that approval, and the merge stops. What a person must see
+is a change to the rules that judge the change or to what publishes it, not every pull request.
+
+1. **Green merges, in every profile.** A pull request whose required checks are green may merge,
+   by a person or by an agent, without a person's approval. The ruleset's default is
+   `checks-only` (0 approvals) in P1, P2 and P3. A team that wants a review on every pull
+   request answers `one-approval`, as the two team presets do, and an existing answer is kept;
+   the auditor no longer requires one.
+2. **Critical is what judges, publishes or names the commands.** The default `protected_paths`
+   are every workflow (`.github/workflows/**`), the ruleset (`.github/rulesets/**`),
+   `.github/CODEOWNERS`, `.agent-setup/project.json` (the commands the checks run) and
+   `<heldout_dir>/**`. Every workflow stays critical because any of them may produce a required
+   check or publish, whatever its name: a list by name misses a brownfield `test.yml`, a
+   `nightly.yml` holding a deploy secret and a local reusable workflow a judge calls.
+3. **Not critical any more:** `.agent-setup/lock.json`. The tool writes it, and agents stay
+   denied hand edits to it; a change to it merges on green.
+4. **A critical change still needs the `human-approved` label**, last added by a person; in a
+   team any person may add it. The merge guard, the label rules and "never merge on red" are
+   unchanged.
+5. **An action bump is routine.** A change to a protected file made only of lines
+   `uses: <owner>/<repo>[/<path>]@<commit> # <tag>` replaced, in place, by a pin of the same
+   action whose commit is the one the tag its comment names resolves to in the action's own
+   repository (`git ls-remote`, an annotated tag counted by the commit it peels to), is not
+   listed as protected and passes without the label. The tag must be a release (`v1.2.3`)
+   strictly above the one it replaces, so a bump never rolls an action back, and the action
+   must belong to another owner than the repository's, since an owner can make its own tags
+   name anything. Any other line (blanks other than spaces included), a new, deleted or
+   renamed file, or a host that cannot answer keeps it protected.
+6. **Supersedes** point 6 of "Engine, CI baseline, security gates and agent guardrails" (one
+   approval in P2 and P3), the lock in the default list of its point 4, and "A single maintainer
+   is not asked for an approval nobody can give": `posture.human-approval-required` and
+   `posture.codeowners-review` are removed from the catalogue, so no rule asks for a review. An
+   accepted-risk entry that still names either of them is reported as naming an unknown rule
+   and should be removed.
+
 ## The person's `human-approved` route stays denied until a real session proves the prompt; the hook is a brake — 2026-11-03
 
 Context (#28): the guard was built to route one canonical command,
