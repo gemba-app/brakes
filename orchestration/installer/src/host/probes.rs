@@ -156,7 +156,12 @@ const REGISTRY: &[Schema] = &[
     },
     Schema {
         id: "ruleset-present",
-        args: &[req("name", Text), req("branch", Text), req("path", Text)],
+        args: &[
+            req("name", Text),
+            req("branch", Text),
+            req("path", Text),
+            opt("declared", Object),
+        ],
     },
     Schema {
         id: "ruleset-required-checks",
@@ -537,19 +542,26 @@ impl Probe<'_> {
         let Some(found) = rulesets.iter().find(|r| r.name == name) else {
             return Ok(ProbeResult::Pending(format!("no ruleset named \"{name}\"")));
         };
-        let Some(file) = self.host.file_contents(self.repo, path, branch)? else {
-            return Ok(ProbeResult::Pending(format!(
-                "{path} is absent on {branch}"
-            )));
-        };
         let what = format!("{path} on {branch} of {}", self.repo);
-        let body: Value = serde_json::from_str(&file.text).map_err(|e| {
-            HostError::new(
-                HostErrorKind::Shape,
-                format!("{what} is not JSON: {}", plain(&e.to_string())),
-            )
-        })?;
-        let declared = declared_ruleset(&body, &what)?;
+        // The render the installer holds is the truth; the file on the branch is only
+        // read when no render is given, so a render not merged yet still counts.
+        let declared = match self.args.get("declared") {
+            Some(body) => declared_ruleset(body, path)?,
+            None => {
+                let Some(file) = self.host.file_contents(self.repo, path, branch)? else {
+                    return Ok(ProbeResult::Pending(format!(
+                        "{path} is absent on {branch}"
+                    )));
+                };
+                let body: Value = serde_json::from_str(&file.text).map_err(|e| {
+                    HostError::new(
+                        HostErrorKind::Shape,
+                        format!("{what} is not JSON: {}", plain(&e.to_string())),
+                    )
+                })?;
+                declared_ruleset(&body, &what)?
+            }
+        };
         let differs = differences(found, &declared);
         if !differs.is_empty() {
             return Ok(ProbeResult::Pending(format!(
