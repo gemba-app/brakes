@@ -254,6 +254,9 @@ fn admin_merge_api_merge_and_protection_changes_are_denied() {
         "gh api --method PUT repos/o/r/branches/main/protection --input p.json",
         "gh api repos/o/r/branches/main/protection/enforce_admins -X DELETE",
         "cd ../other && gh api -X PUT repos/{owner}/{repo}/pulls/3/merge",
+        "gh -X PUT api repos/o/r/pulls/3/merge",
+        "gh --method PUT api repos/o/r/pulls/3/merge",
+        "gh api -X GET -X PUT repos/o/r/pulls/3/merge",
     ] {
         let reason = f.guard(command).unwrap();
         assert!(
@@ -275,6 +278,10 @@ fn ruleset_changes_are_denied_in_both_modes() {
             "gh api --method PUT repos/o/r/rulesets/12",
             "gh api -X DELETE orgs/o/rulesets/3",
             "gh api repos/{owner}/{repo}/rulesets/12 --method=PATCH -f enforcement=disabled",
+            "gh -X DELETE api repos/o/r/rulesets/1",
+            "gh api -X GET -X DELETE repos/o/r/rulesets/1",
+            "bash -n /dev/null; gh api -X DELETE repos/o/r/rulesets/1",
+            "true | sh; gh api -X DELETE repos/o/r/rulesets/1",
         ] {
             let reason = match mode {
                 None => f.guard(command),
@@ -490,6 +497,27 @@ fn human_approved_label_writes_are_denied_in_both_modes() {
         "GH_REPO=o/r gh pr edit 3 --add-label human-approved",
         "command gh label delete human-approved --yes",
         "timeout 60 gh pr edit 3 --add-label human-approved",
+        // GHSA-h8r6-pqxh-jfqg: an alias or an extension, flags before the
+        // subcommand, attached field flags.
+        "gh alias set ap 'pr edit' && gh ap 3 --add-label human-approved",
+        "gh ap human-approved",
+        "gh pr --add-label human-approved edit 3",
+        "gh issue --remove-label=human-approved edit 3",
+        "gh pr -l human-approved create --title t",
+        "gh api repos/o/r/issues/3/labels --raw-field='labels[]=human-approved'",
+        "gh api repos/o/r/issues/3/labels -f'labels[]=human-approved'",
+        "gh api repos/o/r/issues/3/labels --field=labels[]=human-approved",
+        "gh api repos/o/r/issues/3/labels -Flabels[]=@labels.json",
+        "gh api repos/o/r/issues/3/labels --input=labels.json",
+        // Review of the fix: `co` is an alias anyone can redefine, options
+        // before `api`, the last method wins, `pr new`, a percent-encoded name.
+        "gh co human-approved 3",
+        "gh -X POST api repos/o/r/issues/3/labels -f 'labels[]=human-approved'",
+        "gh --method PUT api repos/o/r/issues/3/labels -f 'labels[]=human-approved'",
+        "gh api -X GET -X POST repos/o/r/issues/3/labels -f 'labels[]=human-approved'",
+        "gh pr new --title t --label human-approved",
+        "gh api -X DELETE repos/o/r/labels/human%2Dapproved",
+        "gh api -X DELETE repos/o/r/issues/3/labels/human-approve%64",
     ] {
         assert_in_every_mode(&f, command, Some(LABEL_CHANGE));
     }
@@ -526,6 +554,21 @@ fn unreadable_label_writes_fail_closed() {
         "echo x | xargs gh api -X POST repos/o/r/issues/3/labels -f 'labels[]=bug'",
         "echo bug | xargs gh label delete",
         "sh -c 'gh pr edit 3 --add-label \"$1\"' _ human-approved",
+        // GHSA-h8r6-pqxh-jfqg: a label set by node id, an imported alias, an
+        // alias or extension given a label it cannot read.
+        "gh api graphql -f query='mutation{updatePullRequest(input:{pullRequestId:\"PR_1\",labelIds:[\"LA_1\"]}){clientMutationId}}'",
+        "gh api graphql -f query='mutation { createIssue(input: {repositoryId: \"R\", title: \"t\", labelIds: [\"LA_1\"]}) { clientMutationId } }'",
+        "gh alias import aliases.yml",
+        "gh ap 3 --add-label \"$L\"",
+        // An alias whose body the guard cannot read as harmless, a program
+        // word it cannot read with the label beside it.
+        "gh alias set --clobber co 'pr edit --add-label'",
+        "gh alias set x --shell 'gh pr edit \"$1\" --add-label human-\"$2\"'",
+        "gh alias set z \"pr edit 3 --add-label $L\"",
+        "G=gh; $G pr edit 3 --add-label human-approved",
+        "$(echo gh) pr edit 3 --add-label human-approved",
+        // A stdin shell earlier in the line keeps the rest reviewed.
+        "true | sh; gh pr edit 3 --add-label \"$L\"",
     ] {
         assert_in_every_mode(&f, command, Some(LABEL_UNKNOWN));
     }
@@ -850,8 +893,50 @@ fn label_reads_creates_and_mentions_pass() {
         "cat <<'EOF' > note.md\ngh pr edit 3 --add-label human-approved\ngh label delete human-approved\nEOF",
         "echo 'gh label delete human-approved'",
         "timeout 60 gh pr view 3",
+        "gh search prs --label human-approved",
+        "gh myext list --label bug",
+        "gh alias set co 'pr checkout'",
+        "gh api graphql -f query='mutation { addComment(input: {subjectId: \"PR_1\", body: \"x\"}) { clientMutationId } }'",
+        "bash scripts/check.sh",
+        "gh pr list --search create --label human-approved",
+        "gh co 12",
+        "gh myext -l 5",
+        "bash -o pipefail scripts/check.sh && gh pr view 3",
+        "gh alias set co 'pr checkout'",
     ] {
         assert_in_every_mode(&f, command, None);
+    }
+    assert!(f.calls().is_empty(), "{}", f.calls());
+}
+
+/// GHSA-h8r6-pqxh-jfqg: a shell with no `-c` reads its script from stdin or a
+/// file the guard does not read, so it fails closed as an unreadable command:
+/// denied whenever the command names a merge, `apply --remote` or the label.
+#[test]
+fn a_shell_reading_its_script_from_stdin_fails_closed() {
+    let f = Fixture::new();
+    for command in [
+        "echo 'gh pr edit 3 --add-label human-approved' | sh",
+        "bash <<< 'gh pr edit 3 --add-label human-approved'",
+        "sh <<'EOF'\ngh pr edit 3 --add-label human-approved\nEOF",
+        "echo 'gh pr merge 3 --admin' | bash",
+        "printf 'gh issue edit 3 --remove-label human-approved' | zsh -s",
+        "echo 'gh pr edit 3 --add-label human-approved' | /usr/bin/env bash",
+        "echo 'gh pr edit 3 --add-label human-approved' | fish",
+        "echo 'gh pr edit 3 --add-label human-approved' | busybox sh",
+        "source /dev/stdin <<< 'gh pr edit 3 --add-label human-approved'",
+    ] {
+        for mode in [None, Some("full"), Some("light")] {
+            let reason = match mode {
+                None => f.guard(command),
+                Some(mode) => f.guard_in_mode(command, mode),
+            };
+            let reason = reason.unwrap_or_default();
+            assert!(
+                reason.starts_with("merge guard failed ("),
+                "{command} in {mode:?}: {reason}"
+            );
+        }
     }
     assert!(f.calls().is_empty(), "{}", f.calls());
 }

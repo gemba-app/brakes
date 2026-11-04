@@ -7,15 +7,19 @@
 use std::io::Read;
 use std::path::Path;
 
-use super::review::{Dir, WRITE_METHODS, api_method, expands, positionals};
+use super::review::{Dir, GH_COMMANDS, WRITE_METHODS, api_method, command_words, expands};
 use super::{LABEL_CHANGE, LABEL_UNKNOWN};
 
 /// The label a person sets and an agent may not (owner, 2026-10-29).
 const HUMAN_APPROVED: &str = "human-approved";
 /// The most the guard reads of a file a `gh api` call names; a larger one is unreadable.
 const MAX_READ: u64 = 1 << 20;
-/// GraphQL mutations that change labels by id, which the guard cannot read.
-const LABEL_MUTATIONS: [&str; 3] = ["labelable", "updatelabel", "deletelabel"];
+/// GraphQL mutations and inputs that change labels by id, which the guard
+/// cannot read: `labelIds` is the input of every mutation that sets labels on a
+/// pull request or an issue (`updatePullRequest`, `createIssue`, …).
+const LABEL_MUTATIONS: [&str; 4] = ["labelable", "updatelabel", "deletelabel", "labelids"];
+/// Every option that carries a label in a `gh` command that writes labels.
+const LABEL_FLAGS: [&str; 4] = ["--add-label", "--remove-label", "--label", "-l"];
 /// `gh api` options that take a value other than a field or the input.
 const API_VALUE_FLAGS: [&str; 12] = [
     "-X",
@@ -83,18 +87,44 @@ pub(super) fn review_labels(args: &[String], dir: &Dir, wrapped: bool) -> Option
 }
 
 fn labels(args: &[String], dir: &Dir, wrapped: bool) -> Label {
-    match positionals(args).as_slice() {
+    match command_words(args).as_slice() {
         ["pr" | "issue", "edit", ..] => {
             label_values(args, &["--add-label", "--remove-label"], wrapped)
         }
-        ["pr", "create", ..] => label_values(args, &["-l", "--label"], wrapped),
+        ["pr", "create" | "new", ..] => label_values(args, &["-l", "--label"], wrapped),
         // Any word: the label edited or deleted, or a new `--name` for another.
         ["label", "edit" | "delete", ..] => args
             .iter()
             .map(|a| Label::of(a))
             .fold(Label::floor(wrapped), Label::max),
         ["alias", "set", ..] if args.iter().any(|a| mentions_label(a)) => Label::Named,
+        // A body that builds its words when it runs, or that edits labels or
+        // calls the API, may expand into a label write it does not spell out.
+        ["alias", "set", ..]
+            if args.iter().any(|a| {
+                let a = a.to_ascii_lowercase();
+                a == "--shell"
+                    || a == "-s"
+                    || expands(&a)
+                    || a.contains("label")
+                    || a.contains("api")
+                    || a.contains("graphql")
+            }) =>
+        {
+            Label::Unknown
+        }
+        // A file of aliases the guard does not read.
+        ["alias", "import", ..] => Label::Unknown,
         ["api", ..] => api_labels(args, dir, wrapped),
+        // An alias or an extension: any word that names the label, or a label
+        // option it cannot read (GHSA-h8r6-pqxh-jfqg).
+        [first, ..] if !GH_COMMANDS.contains(first) => {
+            if args.iter().any(|a| mentions_label(a)) {
+                Label::Named
+            } else {
+                label_values(args, &LABEL_FLAGS, wrapped)
+            }
+        }
         _ => Label::Untouched,
     }
 }
@@ -256,7 +286,10 @@ fn api_labels(args: &[String], dir: &Dir, wrapped: bool) -> Label {
     if !WRITE_METHODS.contains(&api_method(args).as_str()) {
         return Label::Untouched;
     }
-    let call = ApiCall::parse(args);
+    let mut call = ApiCall::parse(args);
+    // GitHub decodes a percent-encoded label name (GHSA-h8r6-pqxh-jfqg).
+    let decoded = call.endpoint.map(percent_decoded);
+    call.endpoint = decoded.as_deref();
     let kind = label_endpoint(call.endpoint);
     if kind == LabelEndpoint::Other {
         return Label::Untouched;
@@ -313,6 +346,29 @@ fn api_labels(args: &[String], dir: &Dir, wrapped: bool) -> Label {
         }
         _ => Label::Untouched,
     }
+}
+
+/// `text` with every `%XX` escape decoded; anything else kept as written.
+fn percent_decoded(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = bytes
+            .get(at + 1..at + 3)
+            .and_then(|h| std::str::from_utf8(h).ok());
+        match (bytes[at], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(byte)) => {
+                out.push(byte);
+                at += 3;
+            }
+            (byte, _) => {
+                out.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[cfg(test)]

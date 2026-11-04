@@ -22,7 +22,7 @@ use super::{Undecidable, decide, not_green};
 const GREEN: [&str; 2] = ["pass", "skipping"];
 pub(super) const WRITE_METHODS: [&str; 4] = ["POST", "PUT", "PATCH", "DELETE"];
 /// Words before the command itself that run it unchanged.
-const WRAPPERS: [&str; 5] = ["command", "env", "exec", "nohup", "time"];
+const WRAPPERS: [&str; 6] = ["busybox", "command", "env", "exec", "nohup", "time"];
 
 /// Where the next command runs, as far as the guard can tell.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,7 +71,78 @@ impl Shell {
     }
 }
 
-const SHELLS: [&str; 5] = ["sh", "bash", "zsh", "dash", "ksh"];
+const SHELLS: [&str; 11] = [
+    "sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "yash", "fish", "csh", "tcsh",
+];
+/// What a shell or `source` says when its script comes from stdin: the guard
+/// cannot read it. The rest of the line is still reviewed; the command fails
+/// closed at the end, as one the guard cannot parse (GHSA-h8r6-pqxh-jfqg).
+const UNREADABLE_SCRIPT: &str = "reads a script the guard cannot read";
+/// The commands `gh` ships. `co` is not one: it is an alias anyone can redefine.
+/// Any other first word is an alias or an extension (GHSA-h8r6-pqxh-jfqg).
+pub(super) const GH_COMMANDS: [&str; 35] = [
+    "accessibility",
+    "agent-task",
+    "alias",
+    "api",
+    "attestation",
+    "auth",
+    "browse",
+    "cache",
+    "codespace",
+    "completion",
+    "config",
+    "copilot",
+    "cs",
+    "ext",
+    "extension",
+    "gist",
+    "gpg-key",
+    "help",
+    "issue",
+    "label",
+    "org",
+    "pr",
+    "preview",
+    "project",
+    "release",
+    "repo",
+    "ruleset",
+    "run",
+    "search",
+    "secret",
+    "ssh-key",
+    "status",
+    "variable",
+    "version",
+    "workflow",
+];
+/// The subcommands of `gh pr` and `gh issue`.
+const PR_VERBS: [&str; 19] = [
+    "checkout",
+    "checks",
+    "close",
+    "comment",
+    "create",
+    "diff",
+    "edit",
+    "list",
+    "lock",
+    "merge",
+    "new",
+    "ready",
+    "reopen",
+    "revert",
+    "review",
+    "status",
+    "unlock",
+    "update-branch",
+    "view",
+];
+const ISSUE_VERBS: [&str; 16] = [
+    "close", "comment", "create", "delete", "develop", "edit", "list", "lock", "new", "pin",
+    "reopen", "status", "transfer", "unlock", "unpin", "view",
+];
 /// Installer operations other than `apply`: never a remote write.
 const OTHER_OPERATIONS: [&str; 7] = [
     "install",
@@ -98,16 +169,17 @@ pub(super) fn pre_bash(command: &str, cwd: Option<PathBuf>) -> Result<Option<Str
 /// A `( … )` group restores the state it started with; a `)` without its `(`
 /// (a `case` pattern) leaves nothing known.
 fn review(items: &[Item], shell: &mut Shell) -> Result<Option<String>, String> {
+    let mut pending = None;
     let mut groups = Vec::new();
     let mut conditional = false;
     let mut pipeline = false;
     let mut sequence_start = shell.clone();
     for (index, item) in items.iter().enumerate() {
         let reason = match item {
-            Item::Subshell(inner) => review(inner, &mut shell.clone())?,
+            Item::Subshell(inner) => deferred(review(inner, &mut shell.clone()), &mut pending)?,
             Item::Command(words) => {
                 let before = shell.clone();
-                let reason = review_command(words, shell)?;
+                let reason = deferred(review_command(words, shell), &mut pending)?;
                 // A short-circuited command may never run. Pipeline/background
                 // commands need not affect this shell, even when they succeed.
                 let isolated = matches!(
@@ -155,7 +227,43 @@ fn review(items: &[Item], shell: &mut Shell) -> Result<Option<String>, String> {
             return Ok(reason);
         }
     }
-    Ok(None)
+    pending.map_or(Ok(None), Err)
+}
+
+/// A script the guard cannot read is set aside so the rest of the line is
+/// still reviewed; any other result passes through.
+fn deferred(
+    result: Result<Option<String>, String>,
+    pending: &mut Option<String>,
+) -> Result<Option<String>, String> {
+    match result {
+        Err(error) if error.contains(UNREADABLE_SCRIPT) => {
+            pending.get_or_insert(error);
+            Ok(None)
+        }
+        other => other,
+    }
+}
+
+/// Whether a shell without `-c` reads its script from stdin: no script file
+/// among its words (`-o`/`-O` take a value), or `-s`, or `-`.
+fn reads_stdin(args: &[String]) -> bool {
+    let mut words = args.iter().map(String::as_str);
+    while let Some(word) = words.next() {
+        match word {
+            "-" | "-s" => return true,
+            "-o" | "-O" | "+o" | "+O" => {
+                words.next();
+            }
+            _ if word.starts_with('-') || word.starts_with('+') => {
+                if word.starts_with('-') && !word.starts_with("--") && word.contains('s') {
+                    return true;
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
 }
 
 fn is_assignment(word: &str) -> bool {
@@ -218,7 +326,7 @@ fn review_simple(words: &[String], shell: &mut Shell) -> Result<Option<String>, 
                     host_prefix = Some(env_value(value));
                 }
             }
-            Some(word) if WRAPPERS.contains(&word.as_str()) => {}
+            Some(word) if WRAPPERS.contains(&basename(word)) => {}
             _ => break,
         }
         argv = &argv[1..];
@@ -294,6 +402,14 @@ fn review_program(argv: &[String], shell: &mut Shell) -> Result<Option<String>, 
         }
         // `eval` runs its words in this shell; `sh -c` in a child.
         "eval" => return review(&parse(&args.join(" "))?, shell),
+        // A script read from stdin or a descriptor (GHSA-h8r6-pqxh-jfqg).
+        "source" | "."
+            if args.first().is_some_and(|a| {
+                a == "-" || a.starts_with("/dev/stdin") || a.starts_with("/dev/fd/")
+            }) =>
+        {
+            return Err(format!("{program} {UNREADABLE_SCRIPT}"));
+        }
         _ => {}
     }
     if SHELLS.contains(&basename(program)) {
@@ -302,8 +418,11 @@ fn review_program(argv: &[String], shell: &mut Shell) -> Result<Option<String>, 
             .skip_while(|a| !(a.starts_with('-') && !a.starts_with("--") && a.contains('c')))
             .skip(1)
             .find(|a| !a.starts_with('-'));
+        // Without `-c` the script comes from stdin, which the guard cannot read
+        // (GHSA-h8r6-pqxh-jfqg), or from a file, which it does not read.
         return match script {
             Some(script) => review(&parse(script)?, &mut shell.clone()),
+            None if reads_stdin(args) => Err(format!("{} {UNREADABLE_SCRIPT}", basename(program))),
             None => Ok(None),
         };
     }
@@ -313,6 +432,15 @@ fn review_program(argv: &[String], shell: &mut Shell) -> Result<Option<String>, 
         "cargo" => return Ok(review_cargo(args, false)),
         // `"$BIN" apply . --remote`: the program is not known, the words are.
         _ if expands(program) && applies_remote(args) => return Ok(Some(APPLY_REMOTE.into())),
+        // `$G pr edit 3 --add-label human-approved`: a program the guard cannot
+        // read, given the label (GHSA-h8r6-pqxh-jfqg).
+        _ if expands(program)
+            && args
+                .iter()
+                .any(|a| a.to_ascii_lowercase().contains("human-approved")) =>
+        {
+            return Ok(Some(super::LABEL_UNKNOWN.into()));
+        }
         _ => {}
     }
     // `timeout 600 brakes …`, `xargs cargo run -- …`: a wrapper the
@@ -362,7 +490,7 @@ fn review_program(argv: &[String], shell: &mut Shell) -> Result<Option<String>, 
 /// The deny reason of a `gh` command, if any. `wrapped` is a `gh` run by an
 /// unknown command, which may supply the pull request itself (`xargs`).
 fn review_gh(args: &[String], shell: &mut Shell, wrapped: bool) -> Option<String> {
-    let reason = match positionals(args).as_slice() {
+    let reason = match command_words(args).as_slice() {
         ["api", ..] => review_api(args),
         ["pr", "merge", ..] => review_merge(args, shell, wrapped),
         // A new default repository applies to the commands after it.
@@ -373,6 +501,28 @@ fn review_gh(args: &[String], shell: &mut Shell, wrapped: bool) -> Option<String
         _ => None,
     };
     reason.or_else(|| review_labels(args, &shell.dir, wrapped))
+}
+
+/// The command and subcommand of a `gh` call and the words after them: the
+/// positionals from the first command `gh` ships, and for `pr` and `issue` from
+/// the first of their subcommands, so an option with a value the guard does not
+/// know cannot hide them (`gh -X PUT api …`, `gh pr --add-label x edit 3`). An
+/// alias or an extension keeps every positional.
+pub(super) fn command_words(args: &[String]) -> Vec<&str> {
+    let words = positionals(args);
+    let Some(at) = words.iter().position(|w| GH_COMMANDS.contains(w)) else {
+        return words;
+    };
+    let mut out = words[at..].to_vec();
+    let verbs: &[&str] = match out[0] {
+        "pr" => &PR_VERBS,
+        "issue" => &ISSUE_VERBS,
+        _ => &[],
+    };
+    if let Some(verb) = out[1..].iter().position(|w| verbs.contains(w)) {
+        out.drain(1..1 + verb);
+    }
+    out
 }
 
 /// The words of a `gh` command that are not flags or flag values.
@@ -417,23 +567,29 @@ fn change_dir(dir: &Dir, target: Option<&String>) -> Dir {
 }
 
 pub(super) fn api_method(args: &[String]) -> String {
+    // The last method option wins, as `gh` reads it (GHSA-h8r6-pqxh-jfqg).
+    let mut method = None;
     for (index, arg) in args.iter().enumerate() {
         if (arg == "-X" || arg == "--method") && index + 1 < args.len() {
-            return args[index + 1].to_uppercase();
-        }
-        if let Some(method) = arg.strip_prefix("--method=") {
-            return method.to_uppercase();
-        }
-        if let Some(method) = arg.strip_prefix("-X").filter(|m| !m.is_empty()) {
-            return method.to_uppercase();
+            method = Some(args[index + 1].to_uppercase());
+        } else if let Some(value) = arg.strip_prefix("--method=") {
+            method = Some(value.to_uppercase());
+        } else if let Some(value) = arg.strip_prefix("-X").filter(|m| !m.is_empty()) {
+            method = Some(value.to_uppercase());
         }
     }
-    // gh api switches to POST when fields are given.
+    if let Some(method) = method {
+        return method;
+    }
+    // gh api switches to POST when fields are given, attached ones included
+    // (`-f'k=v'`, `--raw-field=k=v`; GHSA-h8r6-pqxh-jfqg).
     if args.iter().any(|a| {
-        matches!(
-            a.as_str(),
-            "-f" | "-F" | "--field" | "--raw-field" | "--input"
-        )
+        let flag = if a.starts_with("--") {
+            a.split_once('=').map_or(a.as_str(), |(f, _)| f)
+        } else {
+            a.get(..2).unwrap_or(a)
+        };
+        matches!(flag, "-f" | "-F" | "--field" | "--raw-field" | "--input")
     }) {
         "POST".into()
     } else {
