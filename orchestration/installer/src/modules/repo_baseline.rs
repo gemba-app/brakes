@@ -349,7 +349,7 @@ pub fn questions_schema() -> Schema {
                 "codeowners",
                 Kind::Boolean,
                 by_tier(|a| json!(a.codeowners)),
-                "P1 default false: with 0 approvals and agents pushing under the owner's token, CODEOWNERS only requests the owner to review the owner's PRs.",
+                "Seeds CODEOWNERS; a code owner's review is required only under `approvals: one-approval`. P1 default false: with 0 approvals and agents pushing under the owner's token, CODEOWNERS only requests the owner to review the owner's PRs.",
             ),
             question(
                 "bypass_actors",

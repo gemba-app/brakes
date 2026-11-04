@@ -12,18 +12,6 @@
     "macos": false,
     "merge_queue": false,
     "minutes_budget": 2000,
-    "protected_paths": [
-      ".github/rulesets/**",
-      ".github/CODEOWNERS",
-      ".github/workflows/ci.yml",
-      ".github/workflows/agentic-*.yml",
-      ".github/workflows/*release*",
-      ".github/workflows/*deploy*",
-      ".github/workflows/*publish*",
-      ".github/workflows/neutrality.yml",
-      ".github/workflows/_reusable-verify.yml",
-      "tests/heldout/**"
-    ],
     "runner": "github",
     "tiers": true,
     "workflow": "seed"

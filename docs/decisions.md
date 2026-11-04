@@ -15,27 +15,31 @@ is a change to the rules that judge the change or to what publishes it, not ever
 1. **Green merges, in every profile.** A pull request whose required checks are green may merge,
    by a person or by an agent, without a person's approval. The ruleset's default is
    `checks-only` (0 approvals) in P1, P2 and P3. A team that wants a review on every pull
-   request answers `one-approval`, as the two team presets do; the auditor no longer requires
-   one (`posture.human-approval-required` and `posture.codeowners-review` are required for no
-   profile).
-2. **Critical is what judges or publishes.** The default `protected_paths` are the ruleset
-   (`.github/rulesets/**`), `.github/CODEOWNERS`, the workflows that produce the required checks
-   (`.github/workflows/ci.yml` and the `.github/workflows/agentic-*.yml` the tool renders), the
-   workflows whose name says they release, deploy or publish (`*release*`, `*deploy*`,
-   `*publish*` under `.github/workflows/`) and `<heldout_dir>/**`. A repository whose required
-   checks come from another workflow adds it to its answer.
-3. **Not critical any more:** `.agent-setup/lock.json` (the tool writes it, and agents stay
-   denied hand edits to it), and any other workflow. A change to them merges on green.
+   request answers `one-approval`, as the two team presets do, and an existing answer is kept;
+   the auditor no longer requires one.
+2. **Critical is what judges, publishes or names the commands.** The default `protected_paths`
+   are every workflow (`.github/workflows/**`), the ruleset (`.github/rulesets/**`),
+   `.github/CODEOWNERS`, `.agent-setup/project.json` (the commands the checks run) and
+   `<heldout_dir>/**`. Every workflow stays critical because any of them may produce a required
+   check or publish, whatever its name: a list by name misses a brownfield `test.yml`, a
+   `nightly.yml` holding a deploy secret and a local reusable workflow a judge calls.
+3. **Not critical any more:** `.agent-setup/lock.json`. The tool writes it, and agents stay
+   denied hand edits to it; a change to it merges on green.
 4. **A critical change still needs the `human-approved` label**, last added by a person; in a
    team any person may add it. The merge guard, the label rules and "never merge on red" are
    unchanged.
-5. **Supersedes** point 6 of "Engine, CI baseline, security gates and agent guardrails" (one
-   approval in P2 and P3), the default list of its point 4, and "A single maintainer is not
-   asked for an approval nobody can give": `posture.human-approval-required` and
-   `posture.codeowners-review` are removed from the catalogue, so no rule asks for a review.
-6. **An action bump is routine** (follow-up pull request): a change to a critical workflow that
-   only replaces the commit SHA of a pinned action, each new SHA being the commit of the tag its
-   comment names in the action's own repository, passes without the label.
+5. **An action bump is routine.** A change to a protected file made only of lines
+   `uses: <owner>/<repo>[/<path>]@<commit> # <tag>` replaced, in place, by a pin of the same
+   action whose commit is the one the tag its comment names resolves to in the action's own
+   repository (`git ls-remote`, an annotated tag counted by the commit it peels to), is not
+   listed as protected and passes without the label. Any other line, a new, deleted or renamed
+   file, or a host that cannot answer keeps it protected.
+6. **Supersedes** point 6 of "Engine, CI baseline, security gates and agent guardrails" (one
+   approval in P2 and P3), the lock in the default list of its point 4, and "A single maintainer
+   is not asked for an approval nobody can give": `posture.human-approval-required` and
+   `posture.codeowners-review` are removed from the catalogue, so no rule asks for a review. An
+   accepted-risk entry that still names either of them is reported as naming an unknown rule
+   and should be removed.
 
 ## The person's `human-approved` route stays denied until a real session proves the prompt; the hook is a brake — 2026-11-03
 

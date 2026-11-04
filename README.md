@@ -238,7 +238,7 @@ configuration, writes and remote reads need one. A repository declares its comma
 | 1 | CI required on every pull request | `ci-baseline` | your CI, seeded once by `brakes ci init` or your own, audited by `doctor --propose`; its aggregate `required` and the judges' `agentic-required` are both required |
 | 2 | Protected default branch, no bypass for administrators | `repo-baseline` | a ruleset with `enforcement: active` and no bypass actors, applied with `apply --remote` |
 | 3 | Never merge on red, also locally | `merge-guard` | the `guard pre-bash` hook for the agent host, light and full mode |
-| 4 | Only a critical change needs a person | `ci-baseline` | protected paths (the ruleset, CODEOWNERS, the workflows that judge or publish, the held-out tests) need the `human-approved` label; every other pull request merges on green |
+| 4 | Only a critical change needs a person | `ci-baseline` | protected paths (the workflows, the ruleset, CODEOWNERS, the project commands, the held-out tests) need the `human-approved` label, except an action bump verified against its tag; every other pull request merges on green |
 | 5 | Cross-family model review as a gate | `agent-guardrails` | a review by another model family, in two jobs, inside the aggregate |
 | 6 | Human review, when a team asks for it | `repo-baseline` | the review count of the ruleset: 0 by default in every profile, 1 when `approvals` is answered `one-approval` |
 | 7 | Held-out tests | `ci-baseline`, `agent-guardrails` | a held-out directory and job, denied to agents for reading and editing |
