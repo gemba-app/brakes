@@ -27,8 +27,8 @@
     "name": "Install cargo-nextest",
     "uses": {
       "repo": "taiki-e/install-action",
-      "sha": "5488ac5a951645ce95062214902ac4b6bc1a1037",
-      "version": "v2.87.32"
+      "sha": "86f7a0ffb25f40114606501a311ebcfaf882ea32",
+      "version": "v2.88.0"
     },
     "with": {
       "tool": "nextest@0.9.150"
