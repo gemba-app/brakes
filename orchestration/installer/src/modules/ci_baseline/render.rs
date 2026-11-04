@@ -354,6 +354,7 @@ pub fn workflow(cx: &Context<'_>, answers: &CiBaselineAnswers) -> Result<Option<
         .env("EVENT", expr("github.event_name"))
         .env("BASE_SHA", expr("github.event.pull_request.base.sha"))
         .env("HEAD_SHA", expr("github.event.pull_request.head.sha"))
+        .env("REPOSITORY_OWNER", expr("github.repository_owner"))
         .env("INERT_PATHS", answers.inert_paths.join("\n"))
         .env(
             "DOCS_SKIPPABLE",

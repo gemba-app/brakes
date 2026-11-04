@@ -94,6 +94,7 @@ pub const INPUTS: &[(&str, &str)] = &[
     ("EVENT", "github.event_name"),
     ("BASE_SHA", "github.event.pull_request.base.sha"),
     ("HEAD_SHA", "github.event.pull_request.head.sha"),
+    ("REPOSITORY_OWNER", "github.repository_owner"),
     (
         "INERT_PATHS",
         "the inert_paths answer, one prefix glob per line",

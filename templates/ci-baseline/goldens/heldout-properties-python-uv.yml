@@ -51,6 +51,7 @@ jobs:
             .github/CODEOWNERS
             .agent-setup/project.json
             tests/heldout/**
+          REPOSITORY_OWNER: "${{ github.repository_owner }}"
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
@@ -176,7 +177,7 @@ jobs:
           if [ -n "$negated" ]; then
             echo "::warning::protected_paths carries a negation (${negated# }); negations are never evaluated and protect nothing less"
           fi
-          pin_re='^([[:space:]]*(- )?use[s]:[[:space:]]*)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(/[A-Za-z0-9_./-]+)?@([0-9a-f]{40})[[:space:]]+#[[:space:]]*([A-Za-z0-9_.+-]+)[[:space:]]*$'
+          pin_re='^( *(- )?use[s]: *)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(/[A-Za-z0-9_./-]+)?@([0-9a-f]{40}) +# *(v?[0-9]{1,9}(\.[0-9]{1,9})*) *$'
 
           is_tag_commit() {
             local refs sha ref direct="" peeled=""
@@ -189,14 +190,35 @@ jobs:
             [ -n "$direct" ] && [ "$direct" = "$3" ]
           }
 
+          is_newer_release() {
+            local new=${1#v} old=${2#v} a b
+            while [ -n "$new" ] || [ -n "$old" ]; do
+              a=${new%%.*}
+              b=${old%%.*}
+              a=$((10#${a:-0}))
+              b=$((10#${b:-0}))
+              [ "$a" -gt "$b" ] && return 0
+              [ "$a" -lt "$b" ] && return 1
+              case "$new" in *.*) new=${new#*.} ;; *) new="" ;; esac
+              case "$old" in *.*) old=${old#*.} ;; *) old="" ;; esac
+            done
+            return 1
+          }
+
           is_pin_pair() {
-            local prefix action
+            local LC_ALL=C prefix action old_tag owner self
+            [ -n "${REPOSITORY_OWNER:-}" ] || return 1
             [[ $1 =~ $pin_re ]] || return 1
             prefix=${BASH_REMATCH[1]}
             action=${BASH_REMATCH[3]}${BASH_REMATCH[4]}
+            old_tag=${BASH_REMATCH[6]}
             [[ $2 =~ $pin_re ]] || return 1
             [ "${BASH_REMATCH[1]}" = "$prefix" ] || return 1
             [ "${BASH_REMATCH[3]}${BASH_REMATCH[4]}" = "$action" ] || return 1
+            owner="$(printf '%s' "${action%%/*}" | tr '[:upper:]' '[:lower:]')"
+            self="$(printf '%s' "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+            [ "$owner" != "$self" ] || return 1
+            is_newer_release "${BASH_REMATCH[6]}" "$old_tag" || return 1
             is_tag_commit "${BASH_REMATCH[3]}" "${BASH_REMATCH[6]}" "${BASH_REMATCH[5]}"
           }
 

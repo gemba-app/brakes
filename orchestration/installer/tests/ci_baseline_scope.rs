@@ -645,6 +645,7 @@ impl Host {
                 format!("url.{}/.insteadOf", self.root.display()),
             ),
             ("GIT_CONFIG_VALUE_0", "https://github.com/".to_owned()),
+            ("REPOSITORY_OWNER", "example-owner".to_owned()),
         ]);
         env
     }
@@ -739,6 +740,122 @@ fn a_pin_bump_that_cannot_be_verified_is_protected() {
     let (repo, base, head) = bump(&after);
     let run = scope(&repo, host.pr(&base, &head));
     assert_eq!(run.protected(), [".github/workflows/ci.yml"]);
+}
+
+/// The bumped workflow, each case's head text with the stand-in host.
+fn bumped(host: &Host, after: &str) -> Run {
+    let (repo, base, head) = bump(after);
+    scope(&repo, host.pr(&base, &head))
+}
+
+#[test]
+/// An owner can create any tag on its own actions: such a pin is never routine.
+fn a_pin_of_an_action_of_the_same_owner_is_protected() {
+    let host = Host::new();
+    let own = host.tag("example-owner/shared", "v9.0.0", false);
+    let before = workflow(&[("example-owner/shared", OLD_PIN, "v1.0.0")]);
+    let after = workflow(&[("example-owner/shared", &own, "v9.0.0")]);
+    let repo = Repo::with_base(&[(".github/workflows/ci.yml", &before)]);
+    let base = repo.head();
+    let head = repo.commit(&[(".github/workflows/ci.yml", &after)], &[], "own");
+    let run = scope(&repo, host.pr(&base, &head));
+    assert_eq!(run.protected(), [".github/workflows/ci.yml"]);
+}
+
+#[test]
+fn without_the_repository_owner_no_bump_is_routine() {
+    let host = Host::new();
+    let checkout = host.tag("acme/checkout", "v1.1.0", false);
+    let after = workflow(&[
+        ("acme/checkout", &checkout, "v1.1.0"),
+        ("acme/scan/init", OLD_PIN, "v2.0.0"),
+    ]);
+    let (repo, base, head) = bump(&after);
+    let env: Vec<_> = host
+        .pr(&base, &head)
+        .into_iter()
+        .filter(|(k, _)| *k != "REPOSITORY_OWNER")
+        .collect();
+    let run = scope(&repo, env);
+    assert_eq!(run.protected(), [".github/workflows/ci.yml"]);
+}
+
+#[test]
+/// A pin moved back to an older release may reintroduce a fixed flaw.
+fn a_pin_moved_to_an_older_or_equal_release_is_protected() {
+    for tag in ["v0.9.0", "v1.0.0", "v0.10"] {
+        let host = Host::new();
+        let older = host.tag("acme/checkout", tag, false);
+        let after = workflow(&[
+            ("acme/checkout", &older, tag),
+            ("acme/scan/init", OLD_PIN, "v2.0.0"),
+        ]);
+        assert_eq!(
+            bumped(&host, &after).protected(),
+            [".github/workflows/ci.yml"],
+            "{tag}"
+        );
+    }
+}
+
+#[test]
+fn a_release_compares_by_number_not_by_text() {
+    let host = Host::new();
+    let checkout = host.tag("acme/checkout", "v1.10.0", false);
+    let after = workflow(&[
+        ("acme/checkout", &checkout, "v1.10.0"),
+        ("acme/scan/init", OLD_PIN, "v2.0.0"),
+    ]);
+    let run = bumped(&host, &after);
+    assert_eq!(run.protected(), Vec::<String>::new(), "{}", run.stderr);
+}
+
+#[test]
+fn a_pin_to_a_tag_that_is_not_a_release_is_protected() {
+    let host = Host::new();
+    let latest = host.tag("acme/checkout", "latest", false);
+    let after = workflow(&[
+        ("acme/checkout", &latest, "latest"),
+        ("acme/scan/init", OLD_PIN, "v2.0.0"),
+    ]);
+    assert_eq!(
+        bumped(&host, &after).protected(),
+        [".github/workflows/ci.yml"]
+    );
+}
+
+#[test]
+/// YAML reads only a space before `#` as the start of a comment.
+fn a_pin_line_with_any_other_blank_is_protected() {
+    for blank in ["\u{c}", "\t", "\u{3000}"] {
+        let host = Host::new();
+        let checkout = host.tag("acme/checkout", "v1.1.0", false);
+        let after = workflow(&[
+            ("acme/checkout", &checkout, "v1.1.0"),
+            ("acme/scan/init", OLD_PIN, "v2.0.0"),
+        ])
+        .replace(&format!("{checkout} #"), &format!("{checkout}{blank}#"));
+        assert_eq!(
+            bumped(&host, &after).protected(),
+            [".github/workflows/ci.yml"],
+            "{blank:?}"
+        );
+    }
+}
+
+#[test]
+fn a_pin_line_ending_in_a_carriage_return_is_protected() {
+    let host = Host::new();
+    let checkout = host.tag("acme/checkout", "v1.1.0", false);
+    let after = workflow(&[
+        ("acme/checkout", &checkout, "v1.1.0"),
+        ("acme/scan/init", OLD_PIN, "v2.0.0"),
+    ])
+    .replace("# v1.1.0\n", "# v1.1.0\r\n");
+    assert_eq!(
+        bumped(&host, &after).protected(),
+        [".github/workflows/ci.yml"]
+    );
 }
 
 #[test]

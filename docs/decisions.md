@@ -32,8 +32,11 @@ is a change to the rules that judge the change or to what publishes it, not ever
    `uses: <owner>/<repo>[/<path>]@<commit> # <tag>` replaced, in place, by a pin of the same
    action whose commit is the one the tag its comment names resolves to in the action's own
    repository (`git ls-remote`, an annotated tag counted by the commit it peels to), is not
-   listed as protected and passes without the label. Any other line, a new, deleted or renamed
-   file, or a host that cannot answer keeps it protected.
+   listed as protected and passes without the label. The tag must be a release (`v1.2.3`)
+   strictly above the one it replaces, so a bump never rolls an action back, and the action
+   must belong to another owner than the repository's, since an owner can make its own tags
+   name anything. Any other line (blanks other than spaces included), a new, deleted or
+   renamed file, or a host that cannot answer keeps it protected.
 6. **Supersedes** point 6 of "Engine, CI baseline, security gates and agent guardrails" (one
    approval in P2 and P3), the lock in the default list of its point 4, and "A single maintainer
    is not asked for an approval nobody can give": `posture.human-approval-required` and
