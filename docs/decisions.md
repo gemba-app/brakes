@@ -4,6 +4,16 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## An installed project's Dependabot seed says action pins arrive through brakes — 2026-11-04
+
+Decided by the owner (#80). Context: the workflows brakes renders in a project take their action
+pins from `templates/stack-packs/pins.json`. Dependabot proposes the same bumps in the rendered
+files, and the next `brakes install . --apply` puts the old pin back. Excluding those workflows
+from Dependabot stays rejected for the reason of 2026-11-03, point 4: nothing else would say a pin
+is old. The seeded `dependabot.yml` says instead that a bump of a rendered workflow arrives with
+a brakes release and a reinstall, so the maintainer closes Dependabot's pull request and points at
+brakes. A test holds the text.
+
 ## Only a critical change waits for a person; every other pull request merges on green — 2026-11-03
 
 Decided by the owner. Context: with the label on every workflow, the lock and every action

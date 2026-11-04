@@ -762,6 +762,23 @@ fn answers_dependency_updates_selects_one_seed() {
     }
 }
 
+/// The rendered workflows take their action pins from brakes, so a Dependabot bump of
+/// one is undone by the next `brakes install . --apply`; the seed says so (#80).
+#[test]
+fn the_dependabot_seed_says_action_pins_arrive_through_brakes() {
+    let f = Fixture::new();
+    f.apply(&RepoBaseline);
+    let seed = f.read(".github/dependabot.yml");
+    assert!(
+        seed.contains(
+            "# Workflows brakes renders take their action pins from brakes: a bump of one\n\
+             # arrives with a brakes release and `brakes install . --apply`; reinstalling\n\
+             # undoes a bump made in the file.\n"
+        ),
+        "{seed}"
+    );
+}
+
 // ---- issue forms (T3, #702) ----------------------------------------------------
 
 const FORMS_DIR: &str = ".github/ISSUE_TEMPLATE";
