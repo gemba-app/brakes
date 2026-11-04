@@ -553,6 +553,35 @@ fn ruleset_present_is_pending_naming_what_differs_or_what_is_missing() {
     );
 }
 
+#[test]
+fn ruleset_present_compares_the_live_ruleset_with_the_declared_render_when_given() {
+    // The live ruleset still requires "stale"; the render no longer does, and the
+    // file committed on main (not yet updated) still lists it: only the render is true.
+    let live = ruleset(&["required", "stale"], json!([]));
+    let render = file_body(&["required"]);
+    let fake = declared_file(
+        rulesets(Fake::new(), live.clone()).json(BASE, repository(json!({}))),
+        &file_body(&["required", "stale"]),
+    );
+    let mut args = present();
+    args["declared"] = render.clone();
+    assert_eq!(
+        run(&fake, "ruleset-present", args.clone()),
+        pending(
+            "ruleset 42 \"main\" differs from .github/rulesets/main.json in required_status_checks"
+        )
+    );
+    // Equal to the render: verified, whatever the committed file says.
+    let fake = declared_file(
+        rulesets(Fake::new(), ruleset(&["required"], json!([]))).json(BASE, repository(json!({}))),
+        &file_body(&["required", "stale"]),
+    );
+    assert_eq!(
+        run(&fake, "ruleset-present", args),
+        verified("ruleset 42 \"main\" is active on main and equals .github/rulesets/main.json")
+    );
+}
+
 // ---- check-run-reported -------------------------------------------------------------
 
 #[test]

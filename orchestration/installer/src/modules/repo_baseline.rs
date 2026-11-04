@@ -562,11 +562,19 @@ impl Module for RepoBaseline {
         // An answer that cannot be read refuses the render; the steps keep one ruleset.
         let split = Choices::from_answers(cx.answers)
             .is_ok_and(|choices| !choices.ruleset.bypass_actors.is_empty());
-        steps::steps(
+        let mut steps = steps::steps(
             cx.root,
             &ruleset::required_checks(cx.profile, &standard),
             split,
-        )
+        );
+        // A render that cannot be made refuses the plan; the probes then read the branch file.
+        if let Some(files) = Choices::from_answers(cx.answers)
+            .ok()
+            .and_then(|choices| ruleset_files(cx, &choices).ok())
+        {
+            steps::declare(&mut steps, &files.main, files.review.as_deref());
+        }
+        steps
     }
     /// The desired state of the remote items (#902); the ruleset is the text
     /// `render` writes to `.github/rulesets/main.json`, read back.

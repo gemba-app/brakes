@@ -306,3 +306,17 @@ pub fn remote_writes(
     }
     Ok(writes)
 }
+
+/// Hands each ruleset step the ruleset `render` writes, so its probe judges the live
+/// ruleset against the render and not against the file last merged on the branch (#75).
+pub fn declare(steps: &mut [ManualStep], main: &str, review: Option<&str>) {
+    for (id, text) in [("ruleset-main", Some(main)), (REVIEW_ITEM, review)] {
+        let body = text.and_then(|t| serde_json::from_str::<Value>(t).ok());
+        let step = steps.iter_mut().find(|s| s.id == id);
+        if let (Some(step), Some(body)) = (step, body)
+            && let Probe::Remote { args, .. } = &mut step.probe
+        {
+            args.insert("declared".to_owned(), body);
+        }
+    }
+}

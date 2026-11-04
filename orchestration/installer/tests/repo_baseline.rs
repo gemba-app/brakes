@@ -1461,6 +1461,9 @@ fn steps_probe_ids_and_args_are_the_declared_ones() {
         .map(|(id, args)| (id.clone(), json!(args)))
         .collect();
     let labels: Value = serde_json::from_str(LABELS).unwrap();
+    // #75: the probe judges the live ruleset against the render, not the branch's file.
+    let rendered: Value =
+        serde_json::from_str(&fs::read_to_string(f.root.join(RULESET_PATH)).unwrap()).unwrap();
     assert_eq!(
         calls,
         BTreeMap::from([
@@ -1470,7 +1473,8 @@ fn steps_probe_ids_and_args_are_the_declared_ones() {
             ),
             (
                 "ruleset-present".to_owned(),
-                json!({"branch": "main", "name": "brakes: default branch baseline", "path": RULESET_PATH})
+                json!({"branch": "main", "name": "brakes: default branch baseline", "path": RULESET_PATH,
+                    "declared": rendered})
             ),
             (
                 "classic-protection-absent".to_owned(),

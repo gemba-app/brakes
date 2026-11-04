@@ -30,6 +30,7 @@ struct FakeRunner {
     answers: BTreeMap<&'static str, ProbeResult>,
     calls: RefCell<Vec<String>>,
     ruleset_read: Option<String>,
+    args: RefCell<Vec<(String, BTreeMap<String, Value>)>>,
 }
 impl FakeRunner {
     fn with(answers: &[(&'static str, ProbeResult)]) -> Self {
@@ -50,8 +51,9 @@ impl RemoteReader for FakeRunner {
     }
 }
 impl RemoteRunner for FakeRunner {
-    fn run(&self, id: &str, _args: &BTreeMap<String, Value>) -> ProbeResult {
+    fn run(&self, id: &str, args: &BTreeMap<String, Value>) -> ProbeResult {
         self.calls.borrow_mut().push(id.to_owned());
+        self.args.borrow_mut().push((id.to_owned(), args.clone()));
         self.answers
             .get(id)
             .cloned()
@@ -395,6 +397,24 @@ fn repo_baseline_declares_the_desired_state_of_each_remote_item() {
             branch: "main".to_owned(),
             superseded_by: Supersession::None,
         }
+    );
+}
+
+#[test]
+fn the_ruleset_probe_compares_the_live_ruleset_with_the_render_not_the_remote_file() {
+    // #75: a render not merged yet must still be what the live ruleset is judged against.
+    let (_temp, root) = installed();
+    let runner = FakeRunner::with(&[verified("check-run-reported")]);
+    plan(&root, &runner).unwrap();
+    let file = fs::read_to_string(root.join(RULESET_PATH)).unwrap();
+    let args = runner.args.borrow();
+    let (_, probe) = args
+        .iter()
+        .find(|(id, a)| id == "ruleset-present" && a["path"] == RULESET_PATH)
+        .expect("ruleset-main probe ran");
+    assert_eq!(
+        probe["declared"],
+        serde_json::from_str::<Value>(&file).unwrap()
     );
 }
 

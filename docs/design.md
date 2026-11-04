@@ -328,7 +328,9 @@ remote check: `automated-security-fixes`, `check-run-reported`,
 `repository-visibility`, `required-check`, `ruleset-present`,
 `ruleset-required-checks`, `secret-exists`, `secret-present`, `secret-scanning` and
 `workflow-lockfile`; the spec's table gives each one's arguments and its `verified`
-and `pending` conditions. `endpoint-answers` and `secret-exists` are declared for the
+and `pending` conditions. `ruleset-present` takes the optional `declared` ruleset: `repo-baseline` passes the one it
+renders, so the live ruleset is judged against the render, not the file last merged
+(decision of 2026-11-04, #75). `endpoint-answers` and `secret-exists` are declared for the
 "configure new" contract and have no runner yet: they always answer
 `unavailable`. The engine checks every `Probe::Remote` of a module against the
 registry at load, so a module cannot ship a step the registry cannot run.

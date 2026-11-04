@@ -4,6 +4,24 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## A ruleset is judged against the render, not against the file on the branch — 2026-11-04
+
+Context (#75): the `ruleset-present` probe compared the live ruleset with
+`.github/rulesets/main.json` as committed on the default branch. A render not yet merged
+(workflows and rulesets are critical and go through a pull request) left that file equal to the
+live ruleset, so `doctor --remote` said verified and `apply --remote` wrote nothing, while the
+live ruleset kept requiring a check the render had dropped. A retired check whose workflow is
+gone then blocks every pull request.
+
+1. **The render is the truth.** `repo-baseline` hands the ruleset steps (`ruleset-main`, and
+   `ruleset-review` when declared) the ruleset it renders, as the optional `declared` argument of
+   `ruleset-present`. The probe compares the live ruleset with it as sets, both ways: an extra
+   required check is drift, as a missing one is.
+2. **Without `declared`** (`host probe`, a render that cannot be made) the probe reads the file
+   on the branch, as before.
+3. No new write path: `apply --remote` still writes the ruleset through the plan, the write gate
+   and `put_ruleset`; only the step that decides it is pending now judges the right text.
+
 ## Only a critical change waits for a person; every other pull request merges on green — 2026-11-03
 
 Decided by the owner. Context: with the label on every workflow, the lock and every action
