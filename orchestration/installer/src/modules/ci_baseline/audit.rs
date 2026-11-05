@@ -50,7 +50,8 @@ pub fn diagnose(root: &Path, profile: &Value) -> Vec<String> {
 /// The `ci.*` findings, in the spec's rule order then file order.
 pub fn findings(root: &Path, profile: &Value, answers: Option<&Answers>) -> Vec<String> {
     let files = LocalFiles::new(root);
-    let answers = answers.map(Recorded::from);
+    let lock = crate::read(root, crate::LOCK).ok().flatten();
+    let answers = answers.map(|a| Recorded::read(a, lock.as_deref()));
     let mut out = Vec::new();
     if let Some(a) = &answers {
         command_missing(root, profile, a, &mut out);
@@ -141,7 +142,6 @@ pub fn findings(root: &Path, profile: &Value, answers: Option<&Answers>) -> Vec<
         ));
     }
     if let Some(a) = &answers {
-        let lock = crate::read(root, crate::LOCK).ok().flatten();
         project_ci_stale(profile, &required_checks(a, lock.as_deref()), a, &mut out);
     }
     out
@@ -160,6 +160,21 @@ fn required_checks(a: &Recorded, lock: Option<&str>) -> Vec<String> {
         checks.push(CONTRIBUTED_AGGREGATE_CHECK.to_owned());
     }
     checks
+}
+
+/// True when the installed `lock` records a workflow ci-baseline generated (`managed`
+/// `ci.yml` or `agentic-ci.yml`), as `model::workflow_mode` reads it.
+fn generated(lock: Option<&str>) -> bool {
+    let lock = lock.and_then(|text| serde_json::from_str::<Value>(text).ok());
+    [
+        super::render::WORKFLOW_PATH,
+        super::brownfield::BROWNFIELD_PATH,
+    ]
+    .iter()
+    .any(|path| {
+        let entry = &lock.as_ref().map_or(&Value::Null, |l| &l["files"][*path]);
+        entry["module"] == CI_BASELINE && entry["class"] == "managed"
+    })
 }
 
 /// True when the installed `lock` records ci-baseline's remote item `github:<id>`.
@@ -194,16 +209,29 @@ impl Default for Recorded {
     /// The defaults of the question table: what an unmanaged repository is
     /// held to (`required`, the default budget).
     fn default() -> Self {
-        Self::from(&Answers::default())
+        Self::new(&Answers::default(), WorkflowMode::Generate)
     }
 }
-impl From<&Answers> for Recorded {
-    fn from(a: &Answers) -> Self {
+impl Recorded {
+    /// The answers `a` of an installed repository whose lock is `lock`: an unanswered
+    /// `workflow` is read as the plan reads it (`model::workflow_mode`, #65), `seed`
+    /// unless the lock records a workflow ci-baseline generated.
+    fn read(a: &Answers, lock: Option<&str>) -> Self {
+        let unanswered = if generated(lock) {
+            WorkflowMode::Generate
+        } else {
+            WorkflowMode::Seed
+        };
+        Self::new(a, unanswered)
+    }
+
+    fn new(a: &Answers, unanswered: WorkflowMode) -> Self {
         let text = |id: &str| a.get(id).and_then(Value::as_str);
         let workflow = match text("workflow") {
             Some("existing") => WorkflowMode::Existing,
             Some("seed") => WorkflowMode::Seed,
-            _ => WorkflowMode::Generate,
+            Some(_) => WorkflowMode::Generate,
+            None => unanswered,
         };
         let aggregate = match workflow {
             WorkflowMode::Existing => text("aggregate_check").unwrap_or(AGGREGATE_CHECK),
@@ -730,9 +758,14 @@ fn recorded_answers(files: &dyn Files) -> Result<Recorded, Outcome> {
     let path = answers::path(CI_BASELINE);
     match files.read(&path) {
         Ok(None) => Ok(Recorded::default()),
-        Ok(Some(text)) => AnswersFile::parse(CI_BASELINE, &text)
-            .map(|file| Recorded::from(&file.answers))
-            .map_err(|_| Outcome::unavailable(format!("{path} does not parse"))),
+        Ok(Some(text)) => {
+            let lock = files
+                .read(crate::LOCK)
+                .map_err(|e| Outcome::unavailable(format!("{} unreadable: {e}", crate::LOCK)))?;
+            AnswersFile::parse(CI_BASELINE, &text)
+                .map(|file| Recorded::read(&file.answers, lock.as_deref()))
+                .map_err(|_| Outcome::unavailable(format!("{path} does not parse")))
+        }
         Err(e) => Err(Outcome::unavailable(format!("{path} unreadable: {e}"))),
     }
 }

@@ -598,6 +598,44 @@ fn declared_required_checks_are_stale_only_when_they_miss_a_required_one() {
     assert!(stale(json!(["promote"]), existing));
 }
 
+/// #65: an answers file without `workflow` is read as the plan reads it: `seed`, unless
+/// the installed lock records a workflow ci-baseline generated.
+#[test]
+fn an_unanswered_workflow_is_read_as_the_plan_reads_it() {
+    let workflow = format!("{HEAD}{GATE}");
+    let stale = |lock: Option<&str>| {
+        let mut files = vec![(".github/workflows/ci.yml", workflow.as_str())];
+        if let Some(lock) = lock {
+            files.push((".agent-setup/lock.json", lock));
+        }
+        let mut owned: Vec<(String, String)> = files
+            .iter()
+            .map(|(p, t)| ((*p).to_owned(), (*t).to_owned()))
+            .collect();
+        owned.push((
+            ".github/dependabot.yml".to_owned(),
+            DEPENDABOT_ACTIONS.to_owned(),
+        ));
+        let refs: Vec<(&str, &str)> = owned
+            .iter()
+            .map(|(p, t)| (p.as_str(), t.as_str()))
+            .collect();
+        let dir = repo(&refs);
+        let profile = json!({"ci": {"required_checks": ["required"]}});
+        let answers: BTreeMap<String, Value> = BTreeMap::new();
+        let all = audit::findings(dir.path(), &profile, Some(&answers));
+        !rule_lines(&all, "ci.project-ci-stale").is_empty()
+    };
+    // No lock record of a generated workflow: the plan renders a seed, whose ruleset
+    // also requires `agentic-required`, so a declared [required] is stale.
+    assert!(stale(None));
+    // The lock records a generated ci.yml: the plan keeps `generate`, [required] is right.
+    let generated = json!({"schema": 2, "files": {".github/workflows/ci.yml":
+        {"module": "ci-baseline", "class": "managed", "digest": "x"}}})
+    .to_string();
+    assert!(!stale(Some(&generated)));
+}
+
 // --- doctor --------------------------------------------------------------------------
 
 #[test]
