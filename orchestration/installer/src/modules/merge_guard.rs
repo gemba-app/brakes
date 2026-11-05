@@ -88,13 +88,8 @@ impl Module for MergeGuard {
     fn version(&self) -> &'static str {
         MERGE_GUARD_VERSION
     }
-    /// The hook it took over was `setup-core`'s; without that feature nothing is
-    /// required (product-boundary T7a).
     fn requires(&self) -> &'static [&'static str] {
-        #[cfg(feature = "setup-core")]
-        return &[SETUP_CORE];
-        #[cfg(not(feature = "setup-core"))]
-        return &[];
+        &[]
     }
     fn takes_over(&self) -> Option<Takeover> {
         Some(Takeover {

@@ -1041,32 +1041,6 @@ fn put_ruleset_updates_a_differing_ruleset_by_id() {
     assert_eq!(report.updated, [RULESET]);
 }
 
-/// The owner's build renames a ruleset written under the tool's former name in
-/// place, by its id, even when nothing else differs: never a second ruleset (#1067).
-#[cfg(feature = "setup-core")]
-#[test]
-fn put_ruleset_renames_a_ruleset_found_by_its_former_name() {
-    const FORMER: &str = "agentic-setup: default branch baseline";
-    let mut remote = remote_ruleset(true);
-    remote["name"] = json!(FORMER);
-    let fake = Fake::default()
-        .reply("GET", &rulesets_page(), json!([{"id": 42, "name": FORMER}]))
-        .reply("GET", &format!("{BASE}/rulesets/42"), remote)
-        .reply("PUT", &format!("{BASE}/rulesets/42"), json!({"id": 42}));
-    let report = host(&fake)
-        .put_ruleset(&token(), &declared_ruleset())
-        .unwrap();
-    assert_eq!(
-        fake.writes(),
-        vec![(
-            "PUT".to_owned(),
-            format!("{BASE}/rulesets/42"),
-            Some(ruleset_body(json!([]))),
-        )]
-    );
-    assert_eq!(report.updated, [RULESET]);
-}
-
 #[test]
 fn put_ruleset_is_skipped_when_the_plan_refuses_rulesets() {
     let fake = Fake::default().fail_with(

@@ -788,55 +788,6 @@ fn accept_commands_without_apply_says_when_the_apply_would_be_refused() {
     );
 }
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn accept_commands_with_apply_fills_only_the_null_fields() {
-    let repo = Repo::installed(Some("rust-root"));
-    repo.declare("verify", "bash scripts/check.sh");
-    let profile = repo.root.join(".agent-setup/project.json");
-    let text = fs::read_to_string(&profile).unwrap();
-    let mut before = repo.tree();
-    let out = repo.stdout(&[
-        "configure",
-        "<repo>",
-        "stack-packs",
-        "--accept-commands",
-        "--apply",
-    ]);
-    assert!(
-        out.ends_with(
-            "WRITE .agent-setup/project.json\nApplied; fill/review project profile and run doctor.\n"
-        ),
-        "{out}"
-    );
-    let expected = filled(
-        &text,
-        &[
-            ("build", RUST_BUILD),
-            ("lint", RUST_LINT),
-            ("test", RUST_TEST),
-        ],
-    );
-    assert_eq!(fs::read_to_string(&profile).unwrap(), expected);
-    // No other file changed, and the declared `verify` was never touched.
-    before.insert(
-        PathBuf::from(".agent-setup/project.json"),
-        expected.into_bytes(),
-    );
-    assert_eq!(repo.tree(), before);
-    let again = repo.stdout(&["configure", "<repo>", "stack-packs", "--accept-commands"]);
-    assert!(again.ends_with("No changes.\n"), "{again}");
-    // The declared commands reach the managed instructions through `install`.
-    let install = repo.stdout(&["install", "<repo>"]);
-    assert!(
-        install.contains("PLAN AGENTS.md [managed-block:setup-core]\n"),
-        "{install}"
-    );
-}
-
 #[test]
 fn accept_commands_keeps_every_other_byte_of_a_hand_formatted_profile() {
     let repo = Repo::new(Some("rust-root"));

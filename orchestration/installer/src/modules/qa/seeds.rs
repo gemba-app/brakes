@@ -69,8 +69,8 @@ fn file(path: String, class: Ownership, content: Option<String>) -> Rendered {
 /// The managed guide, its `{{tools.playwright}}` and `{{images.playwright}}`
 /// filled from the shared pin table.
 pub fn guide(pins: &PinTable) -> Result<Rendered> {
-    let text = fill(&crate::setup_core_text(GUIDE)?, pins)?
-        .replace("{{images.playwright}}", &pins.image("playwright")?.pinned());
+    let text =
+        fill(GUIDE, pins)?.replace("{{images.playwright}}", &pins.image("playwright")?.pinned());
     Ok(file(GUIDE_PATH.to_owned(), Ownership::Managed, Some(text)))
 }
 

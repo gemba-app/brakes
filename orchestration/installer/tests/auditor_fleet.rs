@@ -147,21 +147,6 @@ fn summary(name: &str, archived: bool) -> Value {
         "archived": archived, "fork": false, "pushed_at": null, "language": null})
 }
 
-/// Compares `actual` with the golden file; `AUDITOR_BLESS=1` rewrites it.
-fn golden(name: &str, actual: &str) {
-    let path = manifest(&format!("tests/golden/auditor/{name}"));
-    if std::env::var_os("AUDITOR_BLESS").is_some() {
-        fs::write(&path, actual).unwrap();
-    }
-    let expected = fs::read_to_string(&path).unwrap();
-    assert_eq!(
-        actual,
-        expected,
-        "{} differs; review and rerun with AUDITOR_BLESS=1 when intended",
-        path.display()
-    );
-}
-
 // --- listing -------------------------------------------------------------------------------
 
 #[test]
@@ -330,52 +315,6 @@ fn a_partial_listing_is_audited_and_reported() {
 
 // --- per-repository audit ------------------------------------------------------------------
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn local_file_rules_read_through_the_contents_api() {
-    let (fake, fleet) = user_fleet();
-    assert_eq!(
-        fake.calls("repos/example-owner/example/contents/.agent-setup/project.json?ref=main"),
-        1,
-        "each file is read once per audit"
-    );
-    assert_eq!(
-        fake.calls("repos/example-owner/brownfield/contents/.agent-setup/project.json?ref=trunk"),
-        1
-    );
-    let example = &fleet.audited[1];
-    let rule = |id: &str| {
-        example
-            .audit
-            .rules
-            .iter()
-            .find(|e| e.rule.id == id)
-            .unwrap()
-            .outcome
-            .clone()
-    };
-    assert_eq!(
-        rule("baseline.purpose-declared").status,
-        brakes::auditor::rules::Status::Passed
-    );
-    assert_eq!(
-        rule("governance.dependency-updates-with-cooldown").status,
-        brakes::auditor::rules::Status::Passed
-    );
-    // The brownfield repository, never installed, is still audited.
-    let brownfield = &fleet.audited[0];
-    let setup = brownfield
-        .audit
-        .rules
-        .iter()
-        .find(|e| e.rule.id == "baseline.guides-installed")
-        .unwrap();
-    assert_eq!(setup.outcome.reason.as_deref(), Some("setup not installed"));
-}
-
 #[test]
 fn contents_files_keep_the_auditor_allowlist() {
     let fake = Fake::default();
@@ -442,27 +381,6 @@ fn organisation_fleet() -> Fleet {
         "example-org",
         Options::default(),
     )
-}
-
-/// The organisation fixture: example-app as recorded (posture, CI health, DORA),
-/// a repository the installer never touched and an archived one.
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn the_report_and_json_match_the_golden_files_and_repeat_byte_for_byte() {
-    let first = organisation_fleet();
-    let second = organisation_fleet();
-    assert_eq!(
-        repos(&first),
-        ["example-org/docs-site", "example-org/example-app"]
-    );
-    let json = |f: &Fleet| format!("{}\n", serde_json::to_string_pretty(&f.json()).unwrap());
-    assert_eq!(first.markdown(), second.markdown());
-    assert_eq!(json(&first), json(&second));
-    golden("fleet.md", &first.markdown());
-    golden("fleet.json", &json(&first));
 }
 
 #[test]

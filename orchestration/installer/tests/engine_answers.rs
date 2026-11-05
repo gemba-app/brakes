@@ -637,115 +637,7 @@ fn set_pairs_are_parsed_by_the_question_type() {
     );
 }
 
-impl Repo {
-    /// Runs the binary; `<repo>` in `args` stands for the repository path.
-    fn cli(&self, args: &[&str]) -> std::process::Output {
-        let root = self.root.to_string_lossy().into_owned();
-        Command::new(env!("CARGO_BIN_EXE_brakes"))
-            .args(
-                args.iter()
-                    .map(|a| if *a == "<repo>" { root.as_str() } else { a }),
-            )
-            .output()
-            .unwrap()
-    }
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn cli_configure_plans_by_default_and_writes_the_answers_file_with_apply() {
-    let repo = Repo::new();
-    assert!(
-        repo.cli(&["install", "<repo>", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let path = answers::path("setup-core");
-    let result = repo.cli(&["configure", "<repo>", "setup-core"]);
-    assert!(result.status.success(), "{result:?}");
-    let out = String::from_utf8_lossy(&result.stdout);
-    assert!(
-        out.contains(&format!("PLAN {path} [answers:setup-core]")),
-        "{out}"
-    );
-    assert!(out.contains("Plan only; no writes."), "{out}");
-    assert!(!repo.root.join(&path).exists());
-
-    let result = repo.cli(&["configure", "<repo>", "setup-core", "--apply"]);
-    assert!(result.status.success(), "{result:?}");
-    let out = String::from_utf8_lossy(&result.stdout);
-    assert!(
-        out.contains(&format!("WRITE {path} [answers:setup-core]")),
-        "{out}"
-    );
-    assert_eq!(
-        repo.value(&path),
-        json!({"module": "setup-core", "version": "1.3.0", "answers": {}})
-    );
-    assert_eq!(
-        repo.value(LOCK)["modules"]["setup-core"]["answers_digest"],
-        json!(digest(&repo.read(&path)))
-    );
-    let result = repo.cli(&["install", "<repo>"]);
-    assert!(String::from_utf8_lossy(&result.stdout).contains("No changes."));
-
-    let file = repo.root.join("../patch.json");
-    fs::write(
-        &file,
-        json!({"module": "setup-core", "answers": {}}).to_string(),
-    )
-    .unwrap();
-    let result = repo.cli(&[
-        "configure",
-        "<repo>",
-        "setup-core",
-        "--answers",
-        file.to_str().unwrap(),
-    ]);
-    assert!(result.status.success(), "{result:?}");
-    assert!(String::from_utf8_lossy(&result.stdout).contains("No changes."));
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn cli_configure_refuses_an_unknown_module_an_unknown_key_and_a_missing_module_id() {
-    let repo = Repo::new();
-    assert!(
-        repo.cli(&["install", "<repo>", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let result = repo.cli(&["configure", "<repo>", "nope", "--apply"]);
-    assert_eq!(result.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&result.stderr).trim(),
-        "REFUSED: Unknown module id: nope"
-    );
-    let result = repo.cli(&[
-        "configure",
-        "<repo>",
-        "setup-core",
-        "--set",
-        "x=1",
-        "--apply",
-    ]);
-    assert_eq!(result.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&result.stderr).trim(),
-        "REFUSED: Module setup-core: answer `x` is not a question of this module"
-    );
-    let result = repo.cli(&["configure", "<repo>"]);
-    assert_eq!(result.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("Usage:"));
-    assert!(!repo.root.join(answers::path("setup-core")).exists());
-    assert!(!repo.root.join(answers::path("nope")).exists());
-}
+impl Repo {}
 
 // ---- #657: `install --module`, `requires` resolution and the migrate hook ----
 
@@ -792,19 +684,6 @@ impl Module for Dependent {
 
 fn ids(modules: &[&dyn Module]) -> Vec<&'static str> {
     modules.iter().map(|m| m.id()).collect()
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn registry_finds_a_compiled_module_by_id() {
-    assert_eq!(
-        brakes::modules::find("setup-core").map(|m| m.version()),
-        Some(brakes::modules::core_version())
-    );
-    assert!(brakes::modules::find("nope").is_none());
 }
 
 #[test]
@@ -1034,68 +913,6 @@ fn install_module_records_it_and_a_later_install_without_module_reconciles_it() 
     assert_eq!(
         repo.value("docs/agent-setup/survey.json")["count"],
         json!(9)
-    );
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn cli_install_module_refuses_an_unknown_id_and_reconciles_a_known_one() {
-    let repo = Repo::new();
-    let result = repo.cli(&["install", "<repo>", "--new-personal", "--module", "nope"]);
-    assert_eq!(result.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&result.stderr).trim(),
-        "REFUSED: Unknown module id: nope"
-    );
-    assert!(!repo.root.join(LOCK).exists());
-
-    assert!(
-        repo.cli(&["install", "<repo>", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let result = repo.cli(&["install", "<repo>", "--module", "setup-core"]);
-    assert!(result.status.success(), "{result:?}");
-    assert!(String::from_utf8_lossy(&result.stdout).contains("No changes."));
-
-    let result = repo.cli(&["doctor", "<repo>", "--module", "setup-core"]);
-    assert_eq!(result.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&result.stderr).trim(),
-        "REFUSED: --module is only available with install"
-    );
-    let result = repo.cli(&["install", "<repo>", "--module"]);
-    assert_eq!(result.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&result.stderr).trim(),
-        "REFUSED: --module needs a module id"
-    );
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn plan_install_activates_the_requested_module_through_the_library() {
-    let repo = Repo::new();
-    assert!(
-        repo.cli(&["install", "<repo>", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let planned =
-        brakes::plan_install(&repo.root, &Source::embedded(), &["setup-core"], None).unwrap();
-    assert!(planned.changes.is_empty(), "{planned:?}");
-    assert_eq!(
-        brakes::plan_install(&repo.root, &Source::embedded(), &["nope"], None)
-            .map(|p| p.changes)
-            .unwrap_err()
-            .to_string(),
-        "Unknown module id: nope"
     );
 }
 

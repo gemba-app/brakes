@@ -15,16 +15,11 @@ pub use merge_guard::MergeGuard;
 pub use qa::Qa;
 pub use repo_baseline::RepoBaseline;
 pub use security::Security;
-#[cfg(feature = "setup-core")]
-pub use setup_core::{SETUP_CORE_VERSION, SetupCore};
 
-/// `setup-core`'s version where it is compiled in (feature `setup-core`), else
-/// `0.0.0`, the version the engine reads a lock with when the module is absent.
+/// `0.0.0`, the version the engine reads a lock with when `setup-core`, a module this
+/// build does not carry, recorded none.
 pub fn core_version() -> &'static str {
-    #[cfg(feature = "setup-core")]
-    return SETUP_CORE_VERSION;
-    #[cfg(not(feature = "setup-core"))]
-    return "0.0.0";
+    "0.0.0"
 }
 pub use stack_packs::StackPacks;
 
@@ -40,8 +35,6 @@ pub use stack_packs::StackPacks;
 /// every module whose `ci_jobs` it collects.
 pub fn all() -> Vec<&'static dyn Module> {
     vec![
-        #[cfg(feature = "setup-core")]
-        &SetupCore,
         &StackPacks,
         &MergeGuard,
         &RepoBaseline,

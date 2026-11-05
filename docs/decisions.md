@@ -4,6 +4,29 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## The `setup-core` cargo feature is removed — 2026-11-05
+
+Context (#60): the product-boundary decision (point 2) left the former core module compiled
+behind a cargo feature, `setup-core`, "before the extraction". The files it read were gone, so
+`cargo build --all-features` failed with 43 errors, 168 `cfg(feature = "setup-core")` sites stayed
+across 36 files, and nothing in CI built the feature, so it rotted unseen. Any tool that audits a
+crate with `--all-features` (a security audit, `cargo-hack`) could not compile it.
+
+1. **The feature, its code and its tests are removed.** The build the product ships (the
+   `not(feature = "setup-core")` side) is the only build. Rendered output is unchanged: the
+   `[[setup-core: …]]` marker text that the product already dropped is taken out of the four
+   templates that carried it, and `setup_core_text`, `DOCUMENTS`, `RETIRED`, the pack `guide` field
+   and the `baseline.*` rules that audited setup-core's content go with it.
+2. **What stays.** The lock keeps reading `setup-core` entries of an older install (migration and
+   release, #48) and the module id in the engine; `merge-guard` still takes over the hook from it.
+3. **Tests.** The tests that only ran with the feature, and those ignored without it because their
+   fixture installs the `setup-core` module, are deleted with it: they could not run in any
+   build. Twelve of them (the `agent-guardrails` goldens and hook-registration tests) covered
+   behaviour that is the product's; they are reintroduced against the product build in their own
+   issue, not carried here as ignored tests.
+4. **`--all-features` now builds**, because there is no feature left to build. A CI job for it is
+   not added: a workflow is a critical path and there is nothing left for it to catch.
+
 ## A ruleset is judged against the render, not against the file on the branch — 2026-11-04
 
 Context (#75): the `ruleset-present` probe compared the live ruleset with

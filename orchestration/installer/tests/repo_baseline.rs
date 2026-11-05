@@ -800,17 +800,11 @@ fn rendered_tree(f: &Fixture, planned: &Planned) -> Vec<(String, String)> {
 }
 
 /// Compares the rendered tree with `tests/golden/repo-baseline/<name>`, the
-/// product's rendering; a build with `setup-core` keeps the guide references the
-/// product omits (#1247) and compares with `tests/golden/repo-baseline-setup-core/<name>`.
+/// product's rendering.
 /// `UPDATE_GOLDENS=1` rewrites the directory first.
 fn assert_golden(name: &str, tree: &[(String, String)]) {
-    let family = if cfg!(feature = "setup-core") {
-        "repo-baseline-setup-core"
-    } else {
-        "repo-baseline"
-    };
     let dir = format!(
-        "{}/tests/golden/{family}/{name}",
+        "{}/tests/golden/repo-baseline/{name}",
         env!("CARGO_MANIFEST_DIR")
     );
     if std::env::var_os("UPDATE_GOLDENS").is_some() {
@@ -1186,10 +1180,7 @@ fn pr_template_has_no_last_verified_line_and_renders_byte_identically() {
 
 use brakes::engine::manual::Owner;
 use brakes::engine::{NoRunner, Probe, ProbeResult, RemoteRunner, StepReport};
-use brakes::modules::repo_baseline::{
-    RFC_TEMPLATE_PATH,
-    steps::{self as baseline_steps, LABELS, REMOTE_ITEMS},
-};
+use brakes::modules::repo_baseline::steps::{self as baseline_steps, LABELS, REMOTE_ITEMS};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
@@ -1734,59 +1725,6 @@ fn steps_doctor_json_matches_the_golden_file() {
 
 // ---- RFC template (T6, #707) ------------------------------------------------------
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn rfc_template_is_managed_with_last_verified_status_line_and_location() {
-    let f = Fixture::new();
-    let planned = f.apply(&RepoBaseline);
-    assert_eq!(RFC_TEMPLATE_PATH, "docs/agent-setup/rfc-template.md");
-    assert_eq!(
-        planned.tags[RFC_TEMPLATE_PATH],
-        (Ownership::Managed, "repo-baseline".to_owned())
-    );
-    let text = f.read(RFC_TEMPLATE_PATH);
-    assert!(last_verified(&text).is_some(), "{text}");
-    assert!(text.contains(
-        "Draft → Discussion (5 days) → Decision (30-minute meeting or written decision) → Accepted | Rejected | Withdrawn"
-    ));
-    assert!(text.contains("docs/rfc/<date>-<slug>.md"));
-    assert!(text.contains("`type:rfc`"));
-    assert!(text.contains("adr-template.md"));
-    for section in [
-        "## Problem and classification",
-        "## Options",
-        "## Recommendation",
-        "## Timebox",
-        "## Decision",
-    ] {
-        assert!(text.contains(section), "{section}");
-    }
-    // The ADR template stays setup-core's, unchanged.
-    assert_ne!(
-        planned.tags["docs/agent-setup/adr-template.md"].1,
-        "repo-baseline"
-    );
-    let doctor = diagnose_with(
-        &f.root,
-        today(),
-        &Source::embedded(),
-        &[&support::SetupCore, &RepoBaseline],
-        &NoRunner,
-    )
-    .unwrap();
-    assert!(
-        !doctor
-            .findings
-            .iter()
-            .any(|l| l.contains("rfc-template.md")),
-        "{:?}",
-        doctor.findings
-    );
-}
-
 // ---- seeds (T5, #705) ----------------------------------------------------------
 
 const SERVICE_CARD: &str = ".agent-setup/service.yaml";
@@ -1940,61 +1878,6 @@ fn seeds_dependabot_without_stack_packs_is_github_actions_monthly_only() {
         "{text}"
     );
     assert!(!text.contains("reviewers"), "{text}");
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn seeds_dependabot_adds_a_weekly_entry_per_active_stack_pack() {
-    let f = Fixture::new();
-    fs::write(f.root.join("Cargo.toml"), "[package]\nname = \"demo\"\n").unwrap();
-    fs::write(f.root.join("Cargo.lock"), "").unwrap();
-    fs::create_dir_all(f.root.join(".agent-setup/modules")).unwrap();
-    fs::write(
-        f.root.join(".agent-setup/modules/stack-packs.json"),
-        serde_json::to_string_pretty(&json!({
-            "module": "stack-packs",
-            "version": "1.0.0",
-            "answers": {
-                "apps.root.path": ".", "apps.root.stack": "rust",
-                "apps.root.container": false, "apps.root.toolchain": false,
-            }
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    let source = Source::embedded();
-    let profile = profile_for(&f.root).unwrap();
-    let core = support::SetupCore;
-    let packs = brakes::modules::StackPacks;
-    let module = RepoBaseline;
-    // A soft read: `repo-baseline` does not require `stack-packs`.
-    assert_eq!(module.requires(), &["setup-core"]);
-    let planned = engine::plan(
-        &f.root,
-        &source,
-        &profile,
-        &[&core, &packs, &module],
-        &|_| true,
-    )
-    .unwrap();
-    let text = planned.changes[DEPENDABOT].clone().unwrap();
-    assert_eq!(
-        dependabot_entries(&text),
-        vec![
-            ("github-actions".into(), "/".into(), "monthly".into()),
-            ("cargo".into(), "/".into(), "weekly".into()),
-        ]
-    );
-    assert_eq!(text.matches("default-days: 7").count(), 2, "{text}");
-    assert_eq!(text.matches("compatible-updates:").count(), 2, "{text}");
-    assert_eq!(
-        text.matches("open-pull-requests-limit: 2").count(),
-        2,
-        "{text}"
-    );
 }
 
 #[test]
@@ -2324,7 +2207,7 @@ fn lifecycle_module_is_registered_after_stack_packs_and_before_ci_baseline() {
     let ids: Vec<&str> = modules::all().iter().map(|m| m.id()).collect();
     assert_eq!(
         ids,
-        crate::support::with_core(&[
+        vec![
             "stack-packs",
             "merge-guard",
             "repo-baseline",
@@ -2332,7 +2215,7 @@ fn lifecycle_module_is_registered_after_stack_packs_and_before_ci_baseline() {
             "security",
             "qa",
             "ci-baseline"
-        ])
+        ]
     );
     assert_eq!(
         modules::find("repo-baseline").map(|m| m.version()),

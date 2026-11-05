@@ -130,36 +130,6 @@ fn assert_only_additive(output: &Output) {
     }
 }
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn unmanaged_repository_plans_only_additive_verbs_and_writes_nothing() {
-    let repo = Repo::personal();
-    let before = repo.tree();
-    let output = repo.run(&["adopt"]);
-    assert_only_additive(&output);
-    let text = stdout(&output);
-    assert!(
-        text.contains("ADD [managed-block:setup-core] AGENTS.md\n"),
-        "{text}"
-    );
-    assert!(text.contains("SEED .agent-setup/project.json"), "{text}");
-    assert!(text.contains("SEED docs/agent-setup/"), "{text}");
-    assert!(
-        !text.contains("SEED .agent-setup/lock.json"),
-        "the lock is not a seed: {text}"
-    );
-    assert!(
-        text.lines()
-            .last()
-            .is_some_and(|l| l.starts_with("Plan only; no writes.")),
-        "{text}"
-    );
-    assert_eq!(repo.tree(), before, "adopt wrote a file");
-}
-
 #[test]
 fn collisions_become_proposals_and_nothing_is_written() {
     let repo = Repo::personal().with_collisions();
@@ -235,29 +205,6 @@ fn a_denylisted_identity_is_refused_even_to_plan() {
     let output = repo.run(&["adopt"]);
     assert_eq!(output.status.code(), Some(2), "{output:?}");
     assert!(stdout(&output).is_empty());
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn json_matches_the_golden_file() {
-    let repo = Repo::personal().with_collisions();
-    let output = repo.run(&["adopt", "--json"]);
-    assert_eq!(output.status.code(), Some(0), "{output:?}");
-    let json = stdout(&output);
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/auditor/adopt.json");
-    let expected = fs::read_to_string(&golden).unwrap_or_default();
-    assert_eq!(
-        json,
-        expected,
-        "adopt --json drifted from {}; actual:\n{json}",
-        golden.display()
-    );
-    let value: Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(value["schema"], 1);
-    assert_eq!(value["apply"], LATER);
 }
 
 #[test]

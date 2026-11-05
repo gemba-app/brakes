@@ -1,5 +1,5 @@
 name: Incident
-description: Unplanned production impact that needs coordinated response[[setup-core: (docs/agent-setup/incidents.md)]].
+description: Unplanned production impact that needs coordinated response.
 title: "[Incident] "
 labels:
   - incident

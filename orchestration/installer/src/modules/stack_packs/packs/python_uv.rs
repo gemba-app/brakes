@@ -9,7 +9,7 @@ use super::{
         App, ContainerSupport, CoverageInstall, CoverageRecipe, CoverageUpload, Evidence,
         Healthcheck, Lockfile, Measure, MutationRecipe, MutationScope, OtelKind, OtelRecipe,
         PinTable, PropertyRecipe, ProposedCommands, Runtime, SeedFile, StackId, StackPack, Step,
-        TestRunnerProfile, setup_core_guide,
+        TestRunnerProfile,
     },
     OTEL_ENV, cache_key, cache_pair, run_in,
 };
@@ -59,7 +59,6 @@ pub const PYTHON_UV: StackPack = StackPack {
         packages: &["opentelemetry-distro", "opentelemetry-exporter-otlp"],
         entrypoint_hint: r#"["/usr/bin/python3", "-c", "from opentelemetry.instrumentation.auto_instrumentation import run; run()", "/usr/bin/python3", "-m", "app"]"#,
         env: OTEL_ENV,
-        guide: setup_core_guide("docs/agent-setup/observability.md#python-uv"),
     }),
     // Line coverage: `percent_covered` mixes branches in when the project sets
     // `branch = true`, so the metric divides lines; an empty run is 0, as

@@ -681,42 +681,6 @@ fn outcome(audit: &Audit, id: &str) -> Outcome {
         .clone()
 }
 
-/// Remote rules are unavailable through the fake host, so the level is not
-/// Gold; what these tests own is that no baseline rule is in the gap.
-fn assert_no_baseline_rule_blocks(audit: &Audit) {
-    let gap = audit
-        .next
-        .as_ref()
-        .map(|n| n.gap.clone())
-        .unwrap_or_default();
-    assert!(!gap.iter().any(|id| id.starts_with("baseline.")), "{gap:?}");
-}
-
-const DECLARED: &str = r#"{"purpose": "Sell bread", "commands": {"verify": "cargo test"}, "criticality": "customers"}"#;
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn a_declared_installed_repository_passes_every_baseline_rule() {
-    let dir = checkout(Some(DECLARED), Some(r#"{"schema": 2}"#));
-    let audit = audit_checkout(dir.path());
-    let purpose = outcome(&audit, "baseline.purpose-declared");
-    assert_eq!(purpose.status, Status::Passed);
-    assert_eq!(purpose.evidence, vec!["purpose: Sell bread"]);
-    let verify = outcome(&audit, "baseline.verify-declared");
-    assert_eq!(verify.status, Status::Passed);
-    assert_eq!(verify.evidence, vec!["commands.verify: cargo test"]);
-    let criticality = outcome(&audit, "baseline.criticality-declared");
-    assert_eq!(criticality.status, Status::Passed);
-    assert_eq!(criticality.evidence, vec!["criticality: customers"]);
-    let setup = outcome(&audit, "baseline.setup-installed");
-    assert_eq!(setup.status, Status::Passed);
-    assert_eq!(setup.evidence, vec![".agent-setup/lock.json present"]);
-    assert_no_baseline_rule_blocks(&audit);
-}
-
 #[test]
 fn an_empty_profile_fails_purpose_verify_and_criticality() {
     let dir = checkout(
@@ -784,35 +748,6 @@ fn a_malformed_profile_fails_naming_the_file() {
     assert_eq!(
         o.evidence,
         vec![".agent-setup/project.json is not a JSON object"]
-    );
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn without_a_lock_setup_installed_is_not_required_and_does_not_block() {
-    let dir = checkout(Some(DECLARED), None);
-    let audit = audit_checkout(dir.path());
-    let setup = outcome(&audit, "baseline.setup-installed");
-    assert_eq!(setup.status, Status::NotRequired);
-    assert_eq!(setup.reason.as_deref(), Some("setup not installed"));
-    assert_no_baseline_rule_blocks(&audit);
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn a_malformed_lock_fails_setup_installed() {
-    let dir = checkout(Some(DECLARED), Some("[]"));
-    let setup = outcome(&audit_checkout(dir.path()), "baseline.setup-installed");
-    assert_eq!(setup.status, Status::Failed);
-    assert_eq!(
-        setup.evidence,
-        vec![".agent-setup/lock.json is not a JSON object"]
     );
 }
 
@@ -982,20 +917,9 @@ const ALLOCATION: &[(&str, Level, &str)] = &[
     ("qa.contract-compatible", Level::Silver, "all"),
 ];
 
-/// The rules the amendment leaves as `doctor` warnings with no level, and the
-/// ids it retires for the one it keeps (#873, points 3 and 4).
-const WARNING_ONLY: &[&str] = &["stack.no-healthcheck", "stack.pin-table-stale"];
-const RETIRED: &[&str] = &[
-    "ci.actions-pinned",
-    "baseline.agent-hooks-registered",
-    "baseline.stop-hook-current",
-];
-
 /// Point 6 of the amendment: each compiled module's level; its manual steps
 /// take it but never below Bronze, in every profile.
 const MODULE_LEVELS: &[(&str, Level)] = &[
-    #[cfg(feature = "setup-core")]
-    ("setup-core", Level::Basic),
     ("repo-baseline", Level::Basic),
     ("merge-guard", Level::Bronze),
     ("stack-packs", Level::Basic),
@@ -1127,25 +1051,6 @@ fn remediation_complete(remediation: &Remediation) -> bool {
     }
 }
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn every_allocated_row_is_in_the_registry_and_no_warning_only_or_retired_id_is() {
-    let ids: BTreeSet<&str> = REGISTRY.iter().map(|r| r.id).collect();
-    for (id, _, _) in ALLOCATION {
-        assert!(
-            ids.contains(id),
-            "{id} is allocated and missing from REGISTRY"
-        );
-    }
-    for id in WARNING_ONLY.iter().chain(RETIRED) {
-        assert!(!ids.contains(id), "{id} must not be a registry rule");
-        assert!(!ALLOCATION.iter().any(|(a, _, _)| a == id), "{id}");
-    }
-}
-
 #[test]
 fn each_compiled_module_has_the_decided_level_for_its_manual_steps() {
     let compiled: BTreeSet<&str> = brakes::modules::all().iter().map(|m| m.id()).collect();
@@ -1219,23 +1124,6 @@ fn the_agents_registry_rules_match_the_data_agent_guardrails_exports() {
         assert_eq!(rule.level, data.level, "{}", data.id);
         assert_eq!(rule.required.profiles, data.profiles, "{}", data.id);
         assert!(rule.required.when.is_empty(), "{}", data.id);
-    }
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn the_first_slice_ships_the_four_local_basic_rules() {
-    let ids: Vec<&str> = REGISTRY.iter().map(|r| r.id).collect();
-    for id in [
-        "baseline.purpose-declared",
-        "baseline.verify-declared",
-        "baseline.criticality-declared",
-        "baseline.setup-installed",
-    ] {
-        assert!(ids.contains(&id), "{id} missing from REGISTRY");
     }
 }
 

@@ -374,9 +374,9 @@ fn packs_pairs_every_app_with_its_pack_in_app_id_order() {
 }
 
 #[test]
-fn the_module_is_registered_after_setup_core_and_requires_nothing() {
+fn the_module_is_registered_first_and_requires_nothing() {
     let ids: Vec<&str> = modules::all().iter().map(|m| m.id()).collect();
-    let first = crate::support::with_core(&["stack-packs"]);
+    let first = ["stack-packs"];
     assert_eq!(ids[..first.len()], first[..]);
     assert_eq!(StackPacks.version(), "1.0.0");
     assert!(StackPacks.requires().is_empty());
@@ -446,26 +446,6 @@ fn configure_refuses_a_rule_without_writing() {
         "stack-packs: app `root` is not a `rust` app: `empty/Cargo.toml` is missing; set apps.root.force=true to record it anyway"
     );
     assert!(!repo.root.join(answers::path("stack-packs")).exists());
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn configuring_setup_core_does_not_add_stack_packs_to_the_lock() {
-    let repo = Repo::new();
-    assert!(
-        repo.cli(&["install", "<repo>", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let result = repo.cli(&["configure", "<repo>", "setup-core", "--apply"]);
-    assert!(result.status.success(), "{result:?}");
-    let lock: Value =
-        serde_json::from_str(&fs::read_to_string(repo.root.join(LOCK)).unwrap()).unwrap();
-    assert!(lock["modules"].get("setup-core").is_some(), "{lock}");
-    assert!(lock["modules"].get("stack-packs").is_none(), "{lock}");
 }
 
 #[test]

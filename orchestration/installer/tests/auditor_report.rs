@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::Command,
 };
 
 const BASE: &str = "repos/example-owner/example";
@@ -348,36 +348,6 @@ fn no_counter_value_changes_the_level_or_the_exit_code() {
 
 // --- --json ---------------------------------------------------------------------------
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn json_matches_the_schema_1_golden_file() {
-    let audited = remote_audit(&fixture());
-    let findings = vec!["WARNING: Merge guard hook is not registered".to_owned()];
-    let json = doctor_audit_json(true, &findings, &[], &[], Some(&audited.json())).unwrap();
-    let golden = manifest("tests/golden/auditor/doctor.json");
-    // `UPDATE_GOLDENS=1` rewrites it, as the module goldens do; review the diff.
-    if std::env::var_os("UPDATE_GOLDENS").is_some() {
-        fs::write(&golden, &json).unwrap();
-    }
-    let expected = fs::read_to_string(&golden).unwrap();
-    assert_eq!(
-        json,
-        expected,
-        "doctor --json drifted from {}; actual:\n{json}",
-        golden.display()
-    );
-    let value: Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(value["schema"], json!(1));
-    assert_eq!(value["level"]["standard"], json!("accepted"));
-    assert_eq!(
-        value["budget"]["api_calls"],
-        json!(audited.budget.api_calls)
-    );
-}
-
 #[test]
 fn json_keeps_todays_keys_first_and_adds_only() {
     let audited = remote_audit(&fixture());
@@ -623,101 +593,6 @@ fn copy_dir(from: &Path, to: &Path) {
             fs::copy(entry.path(), target).unwrap();
         }
     }
-}
-fn cli(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_brakes"))
-        .args(args)
-        .arg(root)
-        .output()
-        .unwrap()
-}
-/// Sets `source_dirty` false so readiness does not depend on the build checkout.
-fn clean_lock(root: &Path) {
-    let path = root.join(brakes::LOCK);
-    let mut lock: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    lock["source_dirty"] = json!(false);
-    fs::write(path, serde_json::to_vec(&lock).unwrap()).unwrap();
-}
-
-/// The lines before the audit section; asserts the section follows.
-fn todays_lines(output: &Output) -> String {
-    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
-    let start = stdout
-        .find("\nAUDIT ")
-        .map(|i| i + 1)
-        .unwrap_or_else(|| panic!("no AUDIT line after today's lines:\n{stdout}"));
-    // The pin-table age (#763) depends on the real clock, not on the set-up.
-    stdout[..start]
-        .lines()
-        .filter(|line| !line.starts_with("WARNING: stack.pin-table-stale:"))
-        .map(|line| format!("{line}\n"))
-        .collect()
-}
-
-/// The golden files under `tests/golden/auditor/today/` were printed by the
-/// binary of main before #716 (2973ba4) for the same set-up; #793 appended the
-/// static `security.*` warnings (no workflow, a lockfile), and #696 the
-/// `hook-registered` step of merge-guard on the installed cases, and #767
-/// the `info:` line of a node app with no known test runner, and #798 the
-/// `security.sast-gate` warning, nothing else.
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn todays_doctor_text_for_the_fixture_repositories_is_byte_identical() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("project");
-    let golden = |case: &str| {
-        fs::read_to_string(manifest(&format!("tests/golden/auditor/today/{case}.txt"))).unwrap()
-    };
-    for case in ["rust-root", "node-monorepo", "go-under-rust"] {
-        let _ = fs::remove_dir_all(&root);
-        copy_dir(
-            &manifest(&format!("tests/fixtures/stack-packs/{case}")),
-            &root,
-        );
-        git_init(&root);
-        let output = cli(&root, &["doctor", "--new-personal"]);
-        assert_eq!(todays_lines(&output), golden(case), "{case}");
-        assert_eq!(output.status.code(), Some(1), "{case}");
-    }
-
-    let _ = fs::remove_dir_all(&root);
-    copy_dir(&manifest("tests/fixtures/stack-packs/rust-root"), &root);
-    git_init(&root);
-    assert!(
-        cli(&root, &["install", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    clean_lock(&root);
-    let output = cli(&root, &["doctor"]);
-    assert_eq!(todays_lines(&output), golden("rust-root-installed"));
-    assert_eq!(output.status.code(), Some(1));
-
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir(&root).unwrap();
-    git_init(&root);
-    assert!(
-        cli(&root, &["install", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let path = root.join(brakes::PROFILE);
-    let mut profile: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    profile["purpose"] = json!("Example");
-    profile["commands"]["verify"] = json!("never executed");
-    profile["criticality"] = json!("internal");
-    fs::write(&path, serde_json::to_vec(&profile).unwrap()).unwrap();
-    assert!(cli(&root, &["install", "--apply"]).status.success());
-    clean_lock(&root);
-    let output = cli(&root, &["doctor"]);
-    assert_eq!(todays_lines(&output), golden("ready"));
-    // Ready, but the checkout has no workflow, so `ci-health.workflow-exists`
-    // (#724) fails Basic from local evidence: code 3. Without `--remote` the
-    // posture rules (#721) have no evidence either; never a silent pass.
-    assert_eq!(output.status.code(), Some(3), "{output:?}");
 }
 
 // --- accepted risks (decision 2026-10-31, #1217) ---------------------------------------

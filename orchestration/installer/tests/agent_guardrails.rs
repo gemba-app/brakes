@@ -135,19 +135,6 @@ impl Fixture {
     }
 }
 
-/// The paths this module owns in a plan, with their rendered content.
-fn owned(planned: &Planned) -> Vec<(String, String)> {
-    planned
-        .tags
-        .iter()
-        .filter(|(_, (_, module))| module == "agent-guardrails")
-        .map(|(path, _)| {
-            let content = planned.changes[path].clone().expect("written, not deleted");
-            (path.clone(), content)
-        })
-        .collect()
-}
-
 fn fragment(planned: &Planned) -> Value {
     serde_json::from_str(planned.changes[SETTINGS_FRAGMENT_PATH].as_deref().unwrap()).unwrap()
 }
@@ -200,7 +187,7 @@ fn module_is_registered_before_ci_baseline_with_its_requirements() {
     let ids: Vec<&str> = modules::all().iter().map(|m| m.id()).collect();
     assert_eq!(
         ids,
-        crate::support::with_core(&[
+        vec![
             "stack-packs",
             "merge-guard",
             "repo-baseline",
@@ -208,7 +195,7 @@ fn module_is_registered_before_ci_baseline_with_its_requirements() {
             "security",
             "qa",
             "ci-baseline"
-        ])
+        ]
     );
     assert_eq!(module.requires(), &["repo-baseline", "ci-baseline"]);
 }
@@ -311,139 +298,6 @@ fn answers_outside_the_subset_refuse_by_rule() {
 }
 
 // ---- goldens --------------------------------------------------------------------
-
-/// Compares every owned path with `tests/golden/agent-guardrails/<case>/<path>`;
-/// `UPDATE_GOLDENS=1` rewrites them.
-fn assert_golden(case: &str, planned: &Planned) {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/golden/agent-guardrails")
-        .join(case);
-    let rendered = owned(planned);
-    if std::env::var_os("UPDATE_GOLDENS").is_some() {
-        let _ = fs::remove_dir_all(&dir);
-        for (path, content) in &rendered {
-            let file = dir.join(path);
-            fs::create_dir_all(file.parent().unwrap()).unwrap();
-            fs::write(file, content).unwrap();
-        }
-    }
-    let mut expected: Vec<String> = Vec::new();
-    collect(&dir, &dir, &mut expected);
-    expected.sort();
-    let paths: Vec<&String> = rendered.iter().map(|(path, _)| path).collect();
-    assert_eq!(paths, expected.iter().collect::<Vec<_>>(), "{case}: paths");
-    for (path, content) in &rendered {
-        let golden = fs::read_to_string(dir.join(path)).unwrap();
-        assert_eq!(content, &golden, "{case}: {path} drifted from its golden");
-    }
-}
-
-fn collect(base: &Path, dir: &Path, out: &mut Vec<String>) {
-    for entry in fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            collect(base, &path, out);
-        } else {
-            let relative = path.strip_prefix(base).unwrap();
-            out.push(relative.to_string_lossy().replace('\\', "/"));
-        }
-    }
-}
-
-fn golden_case(case: &str, f: Fixture, answers: Option<Value>) {
-    if let Some(answers) = answers {
-        f.answer(answers);
-    }
-    let first = f.plan(&AgentGuardrails).unwrap();
-    let second = f.plan(&AgentGuardrails).unwrap();
-    assert_eq!(owned(&first), owned(&second), "{case}: not deterministic");
-    assert_golden(case, &first);
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p1_defaults() {
-    golden_case("p1-defaults", Fixture::new(Some(VERIFY)), None);
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p2_defaults() {
-    golden_case("p2-defaults", Fixture::profiled(Some(VERIFY), "P2"), None);
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p3_defaults() {
-    golden_case("p3-defaults", Fixture::profiled(Some(VERIFY), "P3"), None);
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p1_stop_verify_false() {
-    let answers = json!({"stop_verify": false});
-    golden_case(
-        "p1-stop-verify-false",
-        Fixture::new(Some(VERIFY)),
-        Some(answers),
-    );
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p1_docs() {
-    let answers = json!({"mcp_servers": ["docs"]});
-    golden_case("p1-docs", Fixture::new(Some(VERIFY)), Some(answers));
-}
-
-/// The spec's golden: the catalogue server plus a custom `read-write` one.
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p1_docs_and_custom_read_write() {
-    let answers = json!({
-        "mcp_servers": ["docs"],
-        "mcp_custom.tracker.transport": "http",
-        "mcp_custom.tracker.url": "https://tracker.example/mcp",
-        "mcp_custom.tracker.permissions": "read-write",
-        "mcp_custom.tracker.purpose": "File bugs in the in-house tracker, which has no CLI or API",
-        "mcp_custom.browser.transport": "stdio",
-        "mcp_custom.browser.command": "npx",
-        "mcp_custom.browser.args": ["-y", "@playwright/mcp@0.0.41"],
-        "mcp_custom.browser.purpose": "Drive the local web app in a browser",
-    });
-    golden_case(
-        "p1-docs-custom-read-write",
-        Fixture::new(Some(VERIFY)),
-        Some(answers),
-    );
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_no_verify_declared() {
-    golden_case("no-verify", Fixture::new(None), None);
-}
 
 // ---- the fragment ---------------------------------------------------------------
 
@@ -1098,12 +952,8 @@ fn the_guide_sends_agents_to_the_cli_or_api_for_hosted_tools() {
 // ---- registration, doctor and the CLI (T5, #744; #872) ----------------------------
 
 const SETTINGS: &str = ".claude/settings.json";
-/// This repository's own settings file: three hook groups the installer keeps.
-const REPO_SETTINGS: &str = include_str!("../../../.claude/settings.json");
 const ENTRIES_DRIFT: &str =
     "NOT READY: Managed entries drift: .claude/settings.json (module agent-guardrails)";
-const REVIEW_STEP_UNAVAILABLE: &str = "STEP [unavailable:agent-guardrails] review-secret-present — remote probe `secret-present` runs only with doctor --remote";
-const REVIEW_DEPENDABOT_STEP_UNAVAILABLE: &str = "STEP [unavailable:agent-guardrails] review-dependabot-secret-present — remote probe `secret-present` runs only with doctor --remote";
 /// The agents' App, a step in every profile since #1255.
 const AGENT_APP_STEP_UNAVAILABLE: &str = "STEP [unavailable:agent-guardrails] agent-app — remote probe `app-installed` runs only with doctor --remote";
 
@@ -1225,19 +1075,6 @@ impl Repo {
     }
 }
 
-/// This module's lines among today's, before the audit section (which
-/// re-labels them as rules since #730).
-fn ours(lines: &[String]) -> Vec<&str> {
-    lines
-        .iter()
-        .map(String::as_str)
-        .take_while(|l| !l.starts_with("AUDIT "))
-        .filter(|l| {
-            l.contains("agent-guardrails") || l.contains("Stop verify") || l.contains("Deny rules")
-        })
-        .collect()
-}
-
 #[test]
 fn cli_install_module_alone_refuses_naming_its_requirement() {
     let repo = Repo::new("cargo test --locked");
@@ -1288,90 +1125,6 @@ fn cli_install_with_profile_p2_resolves_the_workflows_default_and_lists_the_step
     assert!(again.lines().any(|l| l == "No changes."), "{again}");
 }
 
-/// Since #748 the installer registers the entries itself: a fresh install
-/// writes them, with merge-guard's hook entry, and `doctor` has no registration
-/// warning or step left to print; the second install prints `No changes.`.
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn install_registers_the_entries_and_doctor_prints_no_registration_warning_or_step() {
-    let repo = Repo::new("cargo test --locked");
-    let out = repo.install(&["--apply"]);
-    assert!(out.status.success(), "{out:?}");
-    let text = String::from_utf8(out.stdout).unwrap();
-    assert!(
-        text.lines()
-            .any(|l| l == "WRITE .claude/settings.json [managed-entries:agent-guardrails]"),
-        "{text}"
-    );
-    let fragment = repo.json(SETTINGS_FRAGMENT_PATH);
-    let settings = repo.json(SETTINGS);
-    assert_eq!(settings, fragment);
-    assert_eq!(settings["hooks"]["PreToolUse"], json!([hook_entry()]));
-    assert!(
-        settings["hooks"]["Stop"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap()
-            .contains("stop_verify.sh")
-    );
-    let lines = repo.doctor();
-    assert_eq!(
-        ours(&lines),
-        [
-            AGENT_APP_STEP_UNAVAILABLE,
-            REVIEW_DEPENDABOT_STEP_UNAVAILABLE,
-            REVIEW_STEP_UNAVAILABLE
-        ],
-        "{lines:#?}"
-    );
-    assert!(
-        !lines
-            .iter()
-            .any(|l| l.contains("registered") || l == ENTRIES_DRIFT),
-        "{lines:#?}"
-    );
-    let again = repo.ok(&["install", "<repo>"]);
-    assert!(again.lines().any(|l| l == "No changes."), "{again}");
-}
-
-/// This repository's `.claude/settings.json` as the project file: its three hook
-/// groups stay as they are, the merge-guard entry is recognised (not added
-/// twice) and the deny rules and Stop entry join them.
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn install_keeps_this_repositorys_hooks_and_adds_the_merge_guard_entry_once() {
-    let repo = Repo::new("cargo test --locked");
-    fs::write(repo.root.join(SETTINGS), REPO_SETTINGS).unwrap();
-    let before: Value = serde_json::from_str(REPO_SETTINGS).unwrap();
-    assert!(repo.install(&["--apply"]).status.success());
-    let after = repo.json(SETTINGS);
-    assert_eq!(
-        after["hooks"]["SessionStart"],
-        before["hooks"]["SessionStart"]
-    );
-    assert_eq!(after["hooks"]["PreToolUse"], before["hooks"]["PreToolUse"]);
-    assert_eq!(after["hooks"]["Stop"][0], before["hooks"]["Stop"][0]);
-    assert_eq!(after["hooks"]["Stop"].as_array().unwrap().len(), 2);
-    assert_eq!(
-        after["permissions"]["deny"],
-        repo.json(SETTINGS_FRAGMENT_PATH)["permissions"]["deny"]
-    );
-    let lines = repo.doctor();
-    assert!(
-        !lines
-            .iter()
-            .any(|l| l.contains("registered") || l == ENTRIES_DRIFT),
-        "{lines:#?}"
-    );
-    let again = repo.ok(&["install", "<repo>"]);
-    assert!(again.lines().any(|l| l == "No changes."), "{again}");
-}
-
 #[test]
 fn install_refuses_an_owned_entry_edited_by_hand() {
     let repo = Repo::new("cargo test --locked");
@@ -1385,51 +1138,6 @@ fn install_refuses_an_owned_entry_edited_by_hand() {
         String::from_utf8_lossy(&out.stderr).trim(),
         "REFUSED: Locally changed managed entry: .claude/settings.json at /hooks/Stop (sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_verify.sh\")"
     );
-}
-
-/// The project keeps its own entries beside the installer's: a hand-edit that
-/// drops the owned ones is drift and the rule's warning until the next install
-/// adds them again, after the project's.
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn owned_entries_deleted_by_hand_are_drift_until_the_next_install_adds_them_after_the_projects() {
-    let repo = Repo::new("cargo test --locked");
-    assert!(repo.install(&["--apply"]).status.success());
-    repo.register(false, false);
-    let lines = repo.doctor();
-    assert!(lines.iter().any(|l| l == STOP_UNREGISTERED), "{lines:#?}");
-    assert!(lines.iter().any(|l| l == DENY_UNREGISTERED), "{lines:#?}");
-    assert!(lines.iter().any(|l| l == ENTRIES_DRIFT), "{lines:#?}");
-    assert!(repo.install(&["--apply"]).status.success());
-    let settings = repo.json(SETTINGS);
-    assert_eq!(
-        settings["permissions"]["allow"],
-        json!(["Bash(git status)"])
-    );
-    assert_eq!(settings["permissions"]["deny"][0], "Bash(rm -rf:*)");
-    assert_eq!(
-        settings["hooks"]["Stop"][0]["hooks"][0]["command"],
-        "echo bye"
-    );
-    assert_eq!(
-        settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
-        "sh .claude/hooks/merge_guard.sh"
-    );
-    assert_eq!(settings["hooks"]["PreToolUse"][1], hook_entry());
-    let lines = repo.doctor();
-    assert_eq!(
-        ours(&lines),
-        [
-            AGENT_APP_STEP_UNAVAILABLE,
-            REVIEW_DEPENDABOT_STEP_UNAVAILABLE,
-            REVIEW_STEP_UNAVAILABLE
-        ],
-        "{lines:#?}"
-    );
-    assert!(!lines.iter().any(|l| l == ENTRIES_DRIFT), "{lines:#?}");
 }
 
 /// Through the library: the entries are the fragment, byte for byte, as
@@ -1610,33 +1318,6 @@ fn install_plan_and_doctor_never_run_verify() {
     let hook = fs::read_to_string(repo.root.join(STOP_VERIFY_PATH)).unwrap();
     assert!(hook.contains(&verify), "{hook}");
     assert!(!called.exists(), "verify was executed");
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn without_the_hook_only_the_deny_rules_and_the_merge_guard_entry_are_registered() {
-    let repo = Repo::new("cargo test --locked");
-    let file = json!({"module": "agent-guardrails", "version": "1.0.0", "answers": {"stop_verify": false}});
-    repo.write_json(&answers::path("agent-guardrails"), &file);
-    assert!(repo.install(&["--apply"]).status.success());
-    assert!(!repo.root.join(STOP_VERIFY_PATH).exists());
-    let settings = repo.json(SETTINGS);
-    assert!(settings["hooks"].get("Stop").is_none(), "{settings}");
-    assert_eq!(settings["hooks"]["PreToolUse"], json!([hook_entry()]));
-    assert!(settings["permissions"]["deny"].as_array().unwrap().len() > 10);
-    let lines = repo.doctor();
-    assert_eq!(
-        ours(&lines),
-        [
-            AGENT_APP_STEP_UNAVAILABLE,
-            REVIEW_DEPENDABOT_STEP_UNAVAILABLE,
-            REVIEW_STEP_UNAVAILABLE
-        ],
-        "{lines:#?}"
-    );
 }
 
 // ---- T6 (#746): the remaining doctor and auditor rules ----
@@ -2439,21 +2120,6 @@ fn firewall_hosts(script: &str) -> Vec<String> {
         .filter(|l| !l.is_empty())
         .map(str::to_owned)
         .collect()
-}
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn golden_p1_environments_with_one_stack_pack() {
-    let f = Fixture::new(Some(VERIFY));
-    with_go_pack(&f);
-    f.answer(all_environments());
-    let first = plan_with_packs(&f).unwrap();
-    let second = plan_with_packs(&f).unwrap();
-    assert_eq!(owned(&first), owned(&second), "not deterministic");
-    assert_golden("p1-environments-go", &first);
 }
 
 /// One Claude Code pin (#971, coordinator): the dev container installs the version

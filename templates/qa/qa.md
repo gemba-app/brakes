@@ -153,11 +153,4 @@ app) and gets its own `<app>-qa-contracts` job, skipped when the pull request do
 touch the app. `--set openapi=none` (or `asyncapi=none`) turns the job off, but `doctor`
 keeps reporting every OpenAPI or AsyncAPI document it finds that nothing checks: an
 answer never hides a contract. A Swagger 2.0 file is never checked; convert it to
-OpenAPI 3.[[setup-core:
-
-## See also
-
-- `e2e.md`: describing critical user journeys independently of the tool, and keeping
-  the environments they run against controlled.
-- `testing.md`: acceptance before implementation, test design and the evidence a test
-  must be able to give.]]
+OpenAPI 3.

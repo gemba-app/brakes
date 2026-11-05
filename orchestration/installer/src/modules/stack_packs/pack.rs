@@ -168,19 +168,6 @@ pub struct OtelRecipe {
     pub packages: &'static [&'static str],
     pub entrypoint_hint: &'static str,
     pub env: &'static [&'static str],
-    /// The section of `setup-core`'s observability guide for this pack; `None`
-    /// when the build has no `setup-core`, which installs that guide (#1247).
-    pub guide: Option<&'static str>,
-}
-
-/// `path` with `setup-core`, `None` without it: data never names a guide the
-/// build does not install.
-pub const fn setup_core_guide(path: &'static str) -> Option<&'static str> {
-    if cfg!(feature = "setup-core") {
-        Some(path)
-    } else {
-        None
-    }
 }
 
 /// How the coverage tool reaches CI.
