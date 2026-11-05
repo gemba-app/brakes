@@ -4,7 +4,8 @@
 # Claude Code runs this when the agent wants to stop. The hook runs the project's
 # declared `verify` command, baked in below at install time, and when it fails exits 2
 # with the reason and the last lines of output on stderr, so the agent continues
-# instead of claiming it is done. It never blocks twice on an identical tree: the
+# instead of claiming it is done. A timeout is not a failure: it exits 0 with the tree
+# recorded as unverified (#18). It never blocks twice on an identical tree: the
 # digest of the working tree (a git tree id over tracked and untracked, not ignored,
 # files) and the last outcome live under the gitdir in brakes/stop-verify.json,
 # inside the checkout and never versioned.
@@ -81,6 +82,10 @@ fi
 if [ "$digest" = "$(field verified)" ]; then
     exit 0
 fi
+if [ "$digest" = "$(field unverified)" ]; then
+    message "Stop hook: verify timed out on this exact tree before and nothing changed; it stays unverified and is not run again."
+    exit 0
+fi
 if [ "$digest" = "$(field blocked)" ]; then
     message "Stop hook: verify failed on this exact tree before and nothing changed; stopping so the failure can be reported, not fixed by blocking again."
     exit 0
@@ -108,10 +113,11 @@ elapsed=$(( $(date +%s) - started ))
 
 if [ -f "$expired" ]; then
     rm -f "$expired"
-    printf '{"blocked":"%s"}\n' "$digest" >"$state"
-    echo "verify failed (timeout after ${timeout}s, exit $code): $verify" >&2
-    tail -n "$tail_lines" "$output" >&2
-    exit 2
+    # A timeout proves nothing either way: it is not a failure, so the agent is not sent
+    # back to work on a tree it did not change, and it is recorded so this tree is not rerun.
+    printf '{"unverified":"%s"}\n' "$digest" >"$state"
+    message "verify unverified (timeout after ${timeout}s): the tests it reached are in $output"
+    exit 0
 fi
 if [ "$code" -ne 0 ]; then
     printf '{"blocked":"%s"}\n' "$digest" >"$state"

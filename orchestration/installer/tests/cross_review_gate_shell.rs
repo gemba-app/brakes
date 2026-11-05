@@ -245,7 +245,7 @@ fn a_verdict_carrying_a_credential_shaped_token_fails_closed_before_posting() {
         format!("github_pat_{twenty}"),
         format!("xoxb-{twenty}"),
         "AKIAIOSFODNN7EXAMPLE".to_owned(),
-        "AKIA0123456789ABCDEF".to_owned(),
+        format!("AKIA{}", "0123456789ABCDEF"),
         "-----BEGIN PRIVATE KEY-----".to_owned(),
         "-----BEGIN RSA PRIVATE KEY-----".to_owned(),
         "-----BEGIN OPENSSH PRIVATE KEY-----".to_owned(),

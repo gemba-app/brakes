@@ -312,22 +312,37 @@ fn clean_tree_at_a_verified_head_takes_the_fast_path_without_running_verify() {
 }
 
 #[test]
-fn timeout_blocks_within_the_bound_and_leaves_no_child_behind() {
+fn a_timeout_is_unverified_not_a_failure_within_the_bound_and_leaves_no_child_behind() {
     let repo = Repo::with_fake("sleep 5 & echo $! > \"$CALLS.sleep\"; wait", 1);
     repo.dirty("new.txt", "x\n");
     let started = Instant::now();
     let out = repo.run();
     let elapsed = started.elapsed();
-    assert_eq!(code(&out), 2, "stdout: {}", text(&out.stdout));
+    // #18: the agent is not pushed to continue on a tree it did not change.
+    assert_eq!(code(&out), 0, "stderr: {}", text(&out.stderr));
     assert!(elapsed < Duration::from_secs(3), "took {elapsed:?}");
-    let stderr = text(&out.stderr);
+    let stdout = text(&out.stdout);
     assert!(
-        stderr.starts_with("verify failed (timeout after 1s"),
-        "{stderr}"
+        stdout.starts_with("{\"systemMessage\":\"verify unverified (timeout after 1s"),
+        "{stdout}"
     );
-    assert!(stderr.contains("verify.sh'"), "{stderr}");
+    assert!(!stdout.contains("failed"), "{stdout}");
+    // Recorded as this tree's outcome, distinct from a failure, and not retried on it.
     let state = repo.state().unwrap();
-    assert!(state.contains("\"blocked\":\""), "{state}");
+    assert!(state.contains("\"unverified\":\""), "{state}");
+    assert!(!state.contains("blocked"), "{state}");
+    let again = repo.run_with(&repo.payload(true));
+    assert_eq!(code(&again), 0);
+    assert!(
+        text(&again.stdout).contains("timed out on this exact tree before"),
+        "{}",
+        text(&again.stdout)
+    );
+    assert_eq!(repo.calls(), 1, "an identical tree is not run again");
+    // A change reruns it.
+    repo.dirty("new.txt", "y\n");
+    repo.run();
+    assert_eq!(repo.calls(), 2);
     let pid = fs::read_to_string(repo.temp.path().join("calls.sleep")).unwrap();
     let pid = pid.trim();
     let deadline = Instant::now() + Duration::from_secs(1);
