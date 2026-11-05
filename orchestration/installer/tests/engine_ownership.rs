@@ -616,23 +616,6 @@ fn remove_keeps_a_present_never_touch_path() {
     assert!(f.lock()["files"].get(NEVER_TOUCH).is_none());
 }
 
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-#[test]
-fn remove_setup_core_is_refused() {
-    let f = Fixture::new();
-    f.apply();
-    let lock_before = f.read(LOCK);
-    assert_eq!(
-        f.remove_refusal(&[&SetupCore, &FixtureModule], "setup-core"),
-        "Cannot remove setup-core: it is the installer's own content"
-    );
-    assert_eq!(f.read(LOCK), lock_before);
-    assert!(f.exists("AGENTS.md"));
-}
-
 #[test]
 fn remove_unknown_id_is_refused_naming_it() {
     let f = Fixture::new();

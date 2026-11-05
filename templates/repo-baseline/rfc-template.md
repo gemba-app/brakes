@@ -9,7 +9,7 @@ Last verified: 2026-10-28
 - Decision by:
 - Decision record (ADR):
 
-An RFC is a pull request that adds `docs/rfc/<date>-<slug>.md` from this template, labelled `type:rfc`. The whole cycle takes one to two weeks. An accepted RFC ends as an ADR[[setup-core: written from `adr-template.md`]]; a rejected or withdrawn one stays as the record of why.
+An RFC is a pull request that adds `docs/rfc/<date>-<slug>.md` from this template, labelled `type:rfc`. The whole cycle takes one to two weeks. An accepted RFC ends as an ADR; a rejected or withdrawn one stays as the record of why.
 
 ## Problem and classification
 What problem, for whom, with what evidence? Systemic (several teams, services or repositories, or hard to reverse) or local? Decide it in 15 minutes: a local decision is an ADR, not an RFC.

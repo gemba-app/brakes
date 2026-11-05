@@ -10,7 +10,7 @@ use super::{
     super::{
         App, ContainerSupport, Evidence, Healthcheck, Lockfile, OtelKind, OtelRecipe,
         PackageManager, PinTable, ProposedCommands, Runtime, SeedFile, StackId, StackPack, Step,
-        TestRunnerProfile, setup_core_guide,
+        TestRunnerProfile,
     },
     OTEL_ENV, cache_key, cache_pair, run_in,
 };
@@ -64,7 +64,6 @@ pub const NODE: StackPack = StackPack {
         ],
         entrypoint_hint: r#"["/nodejs/bin/node", "--require", "@opentelemetry/auto-instrumentations-node/register", "index.js"]"#,
         env: OTEL_ENV,
-        guide: setup_core_guide("docs/agent-setup/observability.md#node"),
     }),
     coverage: None,
     no_coverage: Some(

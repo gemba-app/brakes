@@ -1,7 +1,6 @@
 //! product-boundary T10b (#1247): what the installer renders names only documents
-//! the same build installs. Without `setup-core` (the product), no form, guide or
-//! datum points at an engineering guide that only `setup-core` installs.
-use brakes::modules::stack_packs::packs;
+//! the same build installs: no form, guide or datum points at an engineering guide the
+//! product does not install.
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 /// Every module this build compiles in, installed into a fresh repository with the
@@ -149,36 +148,8 @@ fn the_extractors_skip_placeholders_and_paths() {
     );
 }
 
-#[cfg(not(feature = "setup-core"))]
 #[test]
-fn without_setup_core_no_pack_names_a_guide() {
-    for pack in packs::ALL {
-        if let Some(otel) = pack.otel {
-            assert_eq!(otel.guide, None, "{}", pack.id);
-        }
-    }
-}
-
-#[cfg(feature = "setup-core")]
-#[test]
-fn with_setup_core_every_pack_guide_is_a_document_it_installs() {
-    let installed: BTreeSet<String> = brakes::DOCUMENTS
-        .iter()
-        .map(|(name, _)| format!("docs/agent-setup/{name}"))
-        .collect();
-    let mut named = 0;
-    for pack in packs::ALL {
-        if let Some(guide) = pack.otel.and_then(|o| o.guide) {
-            let path = guide.split_once('#').map_or(guide, |(p, _)| p);
-            assert!(installed.contains(path), "{}: {guide}", pack.id);
-            named += 1;
-        }
-    }
-    assert!(named > 0);
-}
-
-#[test]
-fn the_obsolete_planning_finding_names_the_workflow_guide_only_with_setup_core() {
+fn the_obsolete_planning_finding_names_no_guide() {
     let repo = rendered();
     let profile = repo.path().join(".agent-setup/project.json");
     let mut value: serde_json::Value =
@@ -189,26 +160,9 @@ fn the_obsolete_planning_finding_names_the_workflow_guide_only_with_setup_core()
         serde_json::to_string_pretty(&value).unwrap() + "\n",
     )
     .unwrap();
-    let guide = if cfg!(feature = "setup-core") {
-        " (docs/agent-setup/workflow.md)"
-    } else {
-        ""
-    };
-    let expected = format!(
-        "Obsolete profile field: planning; the workflow is a project convention{guide}, remove the field"
-    );
+    let expected =
+        "Obsolete profile field: planning; the workflow is a project convention, remove the field"
+            .to_owned();
     let findings = brakes::doctor(repo.path()).unwrap();
     assert!(findings.contains(&expected), "{findings:#?}");
-}
-
-#[test]
-fn setup_core_text_keeps_marked_text_only_with_setup_core() {
-    let template = "done[[setup-core: (see `task.md`)]].\nnext[[setup-core:\n- `e2e.md`\n]]end\n";
-    let expected = if cfg!(feature = "setup-core") {
-        "done (see `task.md`).\nnext\n- `e2e.md`\nend\n"
-    } else {
-        "done.\nnextend\n"
-    };
-    assert_eq!(brakes::setup_core_text(template).unwrap(), expected);
-    assert!(brakes::setup_core_text("a[[setup-core: open").is_err());
 }

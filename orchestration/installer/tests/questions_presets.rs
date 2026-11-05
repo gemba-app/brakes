@@ -399,16 +399,6 @@ impl Repo {
     fn recorded(&self) -> String {
         fs::read_to_string(self.root.join(answers::path("survey"))).unwrap()
     }
-    fn cli(&self, args: &[&str]) -> std::process::Output {
-        let root = self.root.to_string_lossy().into_owned();
-        Command::new(env!("CARGO_BIN_EXE_brakes"))
-            .args(
-                args.iter()
-                    .map(|a| if *a == "<repo>" { root.as_str() } else { a }),
-            )
-            .output()
-            .unwrap()
-    }
 }
 
 fn demo() -> Value {
@@ -523,59 +513,6 @@ fn an_unknown_preset_is_refused_listing_the_available_names() {
 }
 
 // ---- The binary: `configure --preset` and `presets`.
-
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "lists setup-core or its guides; product-boundary T7a"
-)]
-#[test]
-fn cli_configure_with_a_preset_plans_without_asking_and_prints_the_preset_line() {
-    let repo = Repo::new();
-    assert!(
-        repo.cli(&["install", "<repo>", "--new-personal", "--apply"])
-            .status
-            .success()
-    );
-    let result = repo.cli(&[
-        "configure",
-        "<repo>",
-        "setup-core",
-        "--preset",
-        "personal-vps",
-    ]);
-    assert!(result.status.success(), "{result:?}");
-    let out = String::from_utf8_lossy(&result.stdout);
-    let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines[0], "ANSWERS none", "{out}");
-    assert_eq!(
-        lines[1], "PRESET personal-vps: no answers for setup-core",
-        "{out}"
-    );
-    assert!(
-        lines.contains(
-            &format!("PLAN {} [answers:setup-core]", answers::path("setup-core")).as_str()
-        ),
-        "{out}"
-    );
-    assert_eq!(
-        lines.last(),
-        Some(&"Plan only; no writes. Review before using --apply.")
-    );
-    assert!(!repo.root.join(answers::path("setup-core")).exists());
-
-    let unknown = repo.cli(&["configure", "<repo>", "setup-core", "--preset", "nope"]);
-    assert_eq!(unknown.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&unknown.stderr).trim(),
-        "REFUSED: Unknown preset `nope`; available: enterprise-k8s, personal-paas, personal-vps, team-cloud"
-    );
-    let doctor = repo.cli(&["doctor", "<repo>", "--preset", "personal-vps"]);
-    assert_eq!(doctor.status.code(), Some(2));
-    assert_eq!(
-        String::from_utf8_lossy(&doctor.stderr).trim(),
-        "REFUSED: --preset and --answers are only available with configure and install"
-    );
-}
 
 #[test]
 fn cli_presets_lists_the_four_names_with_their_descriptions() {

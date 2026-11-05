@@ -301,27 +301,6 @@ fn run_fixture(name: &str) {
     );
 }
 
-/// Fixtures whose expected frames name `setup-core`: they run with the
-/// feature only (product-boundary T7a).
-macro_rules! setup_core_fixtures {
-    ($($name:ident),* $(,)?) => {$(
-        #[test]
-        #[cfg_attr(
-            not(feature = "setup-core"),
-            ignore = "lists setup-core; product-boundary T7a"
-        )]
-        fn $name() {
-            run_fixture(stringify!($name));
-        }
-    )*};
-}
-
-// One fixture per line, as `every_fixture_file_has_a_test` reads them.
-#[rustfmt::skip]
-setup_core_fixtures!(
-    list_modules,
-);
-
 macro_rules! fixtures {
     ($($name:ident),* $(,)?) => {$(
         #[test]
@@ -332,6 +311,7 @@ macro_rules! fixtures {
 }
 
 fixtures!(
+    list_modules,
     initialize_2025_11_25,
     initialize_2025_06_18,
     initialize_unsupported_version,

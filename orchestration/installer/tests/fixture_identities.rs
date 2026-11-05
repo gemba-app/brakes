@@ -28,7 +28,6 @@ const GROUPS: &[&str] = &[
     "tests/fixtures/plain-string-agents.md",
     // T6e: module goldens
     "tests/golden/repo-baseline",
-    "tests/golden/repo-baseline-setup-core",
     "tests/golden/tui",
     "tests/golden/agent-guardrails",
     "tests/golden/security",

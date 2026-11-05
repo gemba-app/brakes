@@ -7,13 +7,6 @@ publish = false
 description = "Conservative personal-repository setup and read-only diagnosis"
 license = "Apache-2.0"
 
-[features]
-# The installer's own content (guides, conventions, decisions index and the
-# managed AGENTS.md block): this repository's layer 1 and 2, not the product
-# (SPEC-product-boundary.md, plan T7). On here; the product builds without it.
-default = []
-setup-core = []
-
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

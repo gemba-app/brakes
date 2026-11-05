@@ -10,7 +10,7 @@ use super::{
         App, ContainerSupport, CoverageInstall, CoverageRecipe, CoverageUpload, Evidence,
         Healthcheck, Lockfile, Measure, MutationRecipe, MutationScope, OtelKind, OtelRecipe,
         PinTable, PropertyRecipe, ProposedCommands, Runtime, SeedFile, StackId, StackPack, Step,
-        TestRunnerProfile, setup_core_guide,
+        TestRunnerProfile,
     },
     OTEL_ENV, save_if,
 };
@@ -62,7 +62,6 @@ pub const RUST: StackPack = StackPack {
         ],
         entrypoint_hint: "",
         env: OTEL_ENV,
-        guide: setup_core_guide("docs/agent-setup/observability.md#rust"),
     }),
     // cargo-llvm-cov adds the `llvm-tools-preview` component itself when it
     // is missing (`CARGO_LLVM_COV_SETUP`, README at v0.9.1).

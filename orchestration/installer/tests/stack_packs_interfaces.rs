@@ -777,34 +777,6 @@ fn device_setup_installs_java_and_gradle_from_the_table_and_selects_xcode() {
     assert_eq!(unseeded[0].working_directory, None);
 }
 
-/// The repository root, where `docs/agent-setup` and `templates` live.
-fn repo_root() -> &'static Path {
-    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-}
-
-/// GitHub's heading anchors in `text`: lower-case, spaces to `-`, other
-/// punctuation but `-` and `_` dropped.
-fn anchors(text: &str) -> Vec<String> {
-    text.lines()
-        .filter_map(|line| {
-            line.trim_start_matches('#')
-                .strip_prefix(' ')
-                .filter(|_| line.starts_with('#'))
-        })
-        .map(|heading| {
-            heading
-                .to_lowercase()
-                .chars()
-                .filter_map(|c| match c {
-                    ' ' => Some('-'),
-                    c if c.is_alphanumeric() || c == '-' || c == '_' => Some(c),
-                    _ => None,
-                })
-                .collect()
-        })
-        .collect()
-}
-
 #[test]
 fn the_four_packs_carry_a_test_runner_profile_and_an_instrumentation_recipe() {
     for pack in packs::FIRST_WAVE {
@@ -820,14 +792,6 @@ fn the_four_packs_carry_a_test_runner_profile_and_an_instrumentation_recipe() {
                 "OTEL_RESOURCE_ATTRIBUTES"
             ],
             "{}: otel env",
-            pack.id
-        );
-        // The guide is setup-core's (#1247): named with the feature only.
-        let guide = format!("docs/agent-setup/observability.md#{}", pack.id);
-        assert_eq!(
-            otel.guide,
-            cfg!(feature = "setup-core").then_some(guide.as_str()),
-            "{}: guide",
             pack.id
         );
         if pack.id == StackId::Node {
@@ -907,30 +871,6 @@ fn the_profiles_match_the_spec() {
     let go = packs::pack(StackId::Go).test_runner.unwrap();
     assert_eq!(go.one_test, "go test ./... -run '^{{name}}$'");
     assert_eq!(go.junit, None);
-}
-
-#[test]
-#[cfg_attr(
-    not(feature = "setup-core"),
-    ignore = "asserts setup-core's own content or id; product-boundary T7b"
-)]
-fn every_guide_anchor_exists_in_the_installed_guide_and_its_template() {
-    for (file, guide_of) in [("observability.md", true), ("testing.md", false)] {
-        for dir in ["docs/agent-setup", "templates"] {
-            let text = fs::read_to_string(repo_root().join(dir).join(file)).unwrap();
-            let found = anchors(&text);
-            for pack in packs::FIRST_WAVE {
-                let anchor = match (guide_of, pack.otel) {
-                    (true, Some(otel)) => otel.guide.unwrap().split_once('#').unwrap().1.to_owned(),
-                    _ => pack.id.to_string(),
-                };
-                assert!(
-                    found.contains(&anchor),
-                    "{dir}/{file}: no heading for #{anchor}"
-                );
-            }
-        }
-    }
 }
 
 /// A node app at the root with `package.json` and an npm lockfile.

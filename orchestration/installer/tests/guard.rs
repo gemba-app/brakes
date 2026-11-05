@@ -350,20 +350,6 @@ fn apply_remote_is_denied_in_both_modes() {
     assert!(f.calls().is_empty(), "{}", f.calls());
 }
 
-/// The owner's build still refuses `apply --remote` through the binary's former
-/// name, which stays installed on machines set up before the rename (#1067).
-#[cfg(feature = "setup-core")]
-#[test]
-fn apply_remote_through_the_former_binary_name_is_denied() {
-    let f = Fixture::new();
-    for command in [
-        "agentic-setup apply . --remote",
-        "timeout 600 agentic-setup apply . --remote",
-    ] {
-        assert_eq!(f.guard(command).as_deref(), Some(APPLY_REMOTE), "{command}");
-    }
-}
-
 #[test]
 fn installer_commands_without_apply_remote_pass() {
     let f = Fixture::new();

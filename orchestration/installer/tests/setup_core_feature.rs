@@ -1,28 +1,19 @@
-//! product-boundary T7a (#1056; SPEC-product-boundary.md, plan T7): `setup-core`
-//! is a cargo feature, on by default here. Without it the module, its guides,
-//! conventions and decisions index are not compiled in, and `agent-guardrails`
-//! renders the `technical-debt.md` line of `AGENTS.md` itself (Decided 6).
+//! product-boundary (#1056, #60): the former `setup-core` module, its guides, conventions
+//! and decisions index are not part of the product and no longer compile in a build
+//! (the cargo feature is gone); `agent-guardrails` renders the `technical-debt.md` line
+//! of `AGENTS.md` itself.
 use brakes::modules;
 
 fn ids() -> Vec<&'static str> {
     modules::all().iter().map(|m| m.id()).collect()
 }
 
-#[cfg(feature = "setup-core")]
-#[test]
-fn with_the_feature_setup_core_is_the_first_module() {
-    assert_eq!(ids()[0], "setup-core");
-    assert!(!brakes::DOCUMENTS.is_empty());
-}
-
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_no_setup_core_module_is_compiled_in() {
     assert!(!ids().contains(&"setup-core"), "{:?}", ids());
     assert_eq!(ids()[0], "stack-packs");
 }
 
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_agent_guardrails_renders_the_technical_debt_line() {
     use std::{fs, process::Command};
@@ -113,17 +104,6 @@ fn registry_ids() -> Vec<&'static str> {
         .collect()
 }
 
-#[cfg(feature = "setup-core")]
-#[test]
-fn with_the_feature_the_catalogue_audits_setup_core() {
-    let ids = registry_ids();
-    for id in SETUP_CORE_RULES {
-        assert!(ids.contains(&id), "{id}");
-    }
-    assert!(ids.contains(&"agents.technical-debt"));
-}
-
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_the_catalogue_is_shorter_by_exactly_those_rules() {
     let ids = registry_ids();
@@ -194,7 +174,6 @@ fn installed_without_setup_core() -> tempfile::TempDir {
     temp
 }
 
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_a_hand_edited_managed_file_of_another_module_is_reported() {
     use std::{fs, process::Command};
@@ -291,7 +270,6 @@ fn a_drifted_managed_file_names_the_module_the_lock_records() {
 
 /// A module the build does not compile (setup-core without the feature) is never
 /// named as the fix: the file is restored or install re-run.
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_a_drift_owned_by_setup_core_is_restored_by_hand() {
     use std::fs;
@@ -328,7 +306,6 @@ fn without_the_feature_a_drift_owned_by_setup_core_is_restored_by_hand() {
 
 /// Without the feature, no rule's remediation sends the user to setup-core (#1260);
 /// a planned module is printed as such (`auditor_report`).
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_no_remediation_names_a_module_the_build_lacks() {
     use brakes::auditor::rules::{REGISTRY, Remediation};
@@ -344,7 +321,6 @@ fn without_the_feature_no_remediation_names_a_module_the_build_lacks() {
 
 /// Without the feature, nothing doctor prints, as text or JSON, names setup-core
 /// (#1260): neither a remediation nor a reason.
-#[cfg(not(feature = "setup-core"))]
 #[test]
 fn without_the_feature_doctor_never_names_setup_core() {
     use std::{fs, process::Command};

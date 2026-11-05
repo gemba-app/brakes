@@ -216,7 +216,7 @@ fn module_is_registered_after_agent_guardrails_and_before_ci_baseline() {
     let ids: Vec<&str> = modules::all().iter().map(|m| m.id()).collect();
     assert_eq!(
         ids,
-        crate::support::with_core(&[
+        vec![
             "stack-packs",
             "merge-guard",
             "repo-baseline",
@@ -224,7 +224,7 @@ fn module_is_registered_after_agent_guardrails_and_before_ci_baseline() {
             "security",
             "qa",
             "ci-baseline"
-        ])
+        ]
     );
 }
 

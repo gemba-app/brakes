@@ -493,13 +493,9 @@ impl Module for RepoBaseline {
     /// The capability map names `engine` and `host-adapter`: the engine's content
     /// is the module `setup-core`; the host adapter is not a module but the runner
     /// of this module's remote probes (T6).
-    /// Without the `setup-core` feature the engine's content is not a module and
-    /// nothing is required (product-boundary T7a).
+    /// The engine's content is not a module, so nothing is required (product-boundary T7a).
     fn requires(&self) -> &'static [&'static str] {
-        #[cfg(feature = "setup-core")]
-        return &["setup-core"];
-        #[cfg(not(feature = "setup-core"))]
-        return &[];
+        &[]
     }
     /// The spec's questions; the engine resolves their per-profile defaults
     /// with the profile the module is installed for.
@@ -528,7 +524,7 @@ impl Module for RepoBaseline {
             service_schema(crate::config::schema_base_url()),
         ));
         for (path, form) in ISSUE_FORM_PATHS.iter().zip(ISSUE_FORMS) {
-            rendered.push(managed(path, crate::setup_core_text(form)?));
+            rendered.push(managed(path, form.to_owned()));
         }
         let Some(block) = block_content(PR_TEMPLATE)? else {
             return refuse("Module repo-baseline: the PR template has no managed block");
@@ -540,10 +536,7 @@ impl Module for RepoBaseline {
             scaffold: Some(PR_TEMPLATE.to_owned()),
         });
         // T6 (#707): the RFC template and the remote items of `steps.rs`.
-        rendered.push(managed(
-            RFC_TEMPLATE_PATH,
-            crate::setup_core_text(RFC_TEMPLATE)?,
-        ));
+        rendered.push(managed(RFC_TEMPLATE_PATH, RFC_TEMPLATE.to_owned()));
         if steps::labels().is_empty() {
             return refuse(
                 "Module repo-baseline: templates/repo-baseline/labels.json is not a label list",

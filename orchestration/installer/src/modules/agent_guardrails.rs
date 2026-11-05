@@ -554,7 +554,6 @@ impl Module for AgentGuardrails {
         ));
         out.push(seed(WORKTREEINCLUDE_PATH, WORKTREEINCLUDE.to_owned()));
         out.push(seed(TECHNICAL_DEBT_PATH, TECHNICAL_DEBT.to_owned()));
-        #[cfg(not(feature = "setup-core"))]
         {
             let block = format!("{}\n{TECHNICAL_DEBT_LINE}\n{}", crate::BEGIN, crate::END);
             out.push(Rendered {

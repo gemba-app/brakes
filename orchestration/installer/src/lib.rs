@@ -10,7 +10,6 @@ pub mod host;
 /// Former names this build still recognises, so repositories installed under them are
 /// migrated in place (#1067). The owner's build carries them (`legacy.rs`, never exported);
 /// the product has no former name.
-#[cfg(not(feature = "setup-core"))]
 pub mod legacy {
     pub const BLOCK_MARKERS: &[(&str, &str)] = &[];
     pub const RULESET_NAMES: &[(&str, &str)] = &[];
@@ -23,8 +22,6 @@ pub mod questions;
 pub mod remote;
 pub mod scope;
 
-#[cfg(feature = "setup-core")]
-use conventions::DECISIONS_INDEX;
 pub use profile::{default_profile, profile_for};
 pub use scope::{destination, directory, personal_scope, read_scope};
 use sha2::{Digest, Sha256};
@@ -51,44 +48,6 @@ pub fn read(root: &Path, name: &str) -> Result<Option<String>> {
     }
 }
 
-/// `setup-core`'s guides and templates (feature `setup-core`, SPEC-product-boundary.md).
-#[cfg(feature = "setup-core")]
-macro_rules! guides {
-    ($($name:literal),* $(,)?) => {
-        pub const DOCUMENTS: &[(&str, &str)] = &[$(($name, include_str!(concat!("../../../templates/", $name)))),*];
-    };
-}
-#[cfg(feature = "setup-core")]
-guides!(
-    "principles.md",
-    "task.md",
-    "index.md",
-    "architecture.md",
-    "decisions.md",
-    "testing.md",
-    "code-style.md",
-    "domain.md",
-    "delivery.md",
-    "operations.md",
-    "observability.md",
-    "security.md",
-    "project-context-template.md",
-    "adr-template.md",
-    "review-template.md",
-    "patterns.md",
-    "contracts.md",
-    "containers.md",
-    "ci.md",
-    "cd.md",
-    "e2e.md",
-    "contract-template.md",
-    "delivery-profile-template.md",
-    "incidents.md",
-    "runbook-template.md",
-    "postmortem-template.md",
-    "workflow.md",
-);
-
 /// The hook files the source carries for `merge-guard` (#696).
 pub use modules::merge_guard::HOOKS;
 
@@ -98,59 +57,12 @@ pub struct Source {
     pub revision: Option<String>,
     pub dirty: bool,
 }
-/// `setup-core`'s decisions index, which no other module renders.
-fn is_decisions_index(name: &str) -> bool {
-    #[cfg(feature = "setup-core")]
-    return name == DECISIONS_INDEX;
-    #[cfg(not(feature = "setup-core"))]
-    return {
-        let _ = name;
-        false
-    };
-}
-
-/// Template text that names a document only `setup-core` installs is wrapped in
-/// `[[setup-core:` … `]]`. The text is kept, without the marker, when the build
-/// has `setup-core`, and dropped without it, so the product never names a guide it
-/// does not install (#1247). An unclosed marker is a refusal.
-pub fn setup_core_text(template: &str) -> Result<String> {
-    const OPEN: &str = "[[setup-core:";
-    let mut out = String::with_capacity(template.len());
-    let mut rest = template;
-    while let Some(start) = rest.find(OPEN) {
-        out.push_str(&rest[..start]);
-        let inner = &rest[start + OPEN.len()..];
-        let Some(end) = inner.find("]]") else {
-            return refuse("Template: unclosed [[setup-core: marker");
-        };
-        if cfg!(feature = "setup-core") {
-            out.push_str(&inner[..end]);
-        }
-        rest = &inner[end + 2..];
-    }
-    out.push_str(rest);
-    Ok(out)
-}
-
-/// The guides `setup-core` installs, by file name; none without the feature.
-fn guide_documents() -> &'static [(&'static str, &'static str)] {
-    #[cfg(feature = "setup-core")]
-    return DOCUMENTS;
-    #[cfg(not(feature = "setup-core"))]
-    return &[];
-}
-
 impl Source {
     pub fn embedded() -> Self {
         Self {
-            documents: guide_documents()
+            documents: HOOKS
                 .iter()
-                .map(|(n, s)| (format!("docs/agent-setup/{n}"), (*s).to_owned()))
-                .chain(
-                    HOOKS
-                        .iter()
-                        .map(|(n, s)| ((*n).to_owned(), (*s).to_owned())),
-                )
+                .map(|(n, s)| ((*n).to_owned(), (*s).to_owned()))
                 .collect(),
             version: include_str!("../../../VERSION").trim().to_owned(),
             revision: match env!("BRAKES_COMMIT") {
@@ -161,19 +73,9 @@ impl Source {
         }
     }
     pub fn checkout(root: &Path) -> Result<Self> {
-        let documents = guide_documents()
+        let documents = HOOKS
             .iter()
-            .map(|(n, _)| {
-                Ok((
-                    format!("docs/agent-setup/{n}"),
-                    fs::read_to_string(root.join("templates").join(n))?,
-                ))
-            })
-            .chain(
-                HOOKS
-                    .iter()
-                    .map(|(n, _)| Ok(((*n).to_owned(), fs::read_to_string(root.join(n))?))),
-            )
+            .map(|(n, _)| Ok(((*n).to_owned(), fs::read_to_string(root.join(n))?)))
             .collect::<Result<_>>()?;
         let revision = scope::git(root, &["rev-parse", "HEAD"]).ok();
         let dirty = scope::git(root, &["status", "--porcelain"]).map_or(true, |s| !s.is_empty());
@@ -262,28 +164,6 @@ pub fn renamed_ruleset(name: &str) -> Option<&'static str> {
         .map(|(_, current)| *current)
 }
 
-/// Guides this setup installed before and has since withdrawn (decision 2026-10-27,
-/// "Planning follows Agent Skills as published"). An unchanged copy is deleted on
-/// install; a locally edited one is refused, like any other managed content.
-#[cfg(feature = "setup-core")]
-pub const RETIRED: &[&str] = &[
-    "docs/agent-setup/change-template.md",
-    "docs/agent-setup/plan-template.md",
-    "docs/agent-setup/prd-template.md",
-];
-
-#[cfg(feature = "setup-core")]
-fn expected_paths() -> Vec<String> {
-    ["AGENTS.md", "CLAUDE.md", DECISIONS_INDEX]
-        .into_iter()
-        .map(str::to_owned)
-        .chain(
-            DOCUMENTS
-                .iter()
-                .map(|(n, _)| format!("docs/agent-setup/{n}")),
-        )
-        .collect()
-}
 /// Destination -> new content, or `None` to delete a retired managed file.
 pub type Plan = BTreeMap<String, Option<String>>;
 pub fn plan(root: &Path, source: &Source) -> Result<Plan> {
@@ -293,7 +173,7 @@ pub fn plan(root: &Path, source: &Source) -> Result<Plan> {
 pub fn plan_detailed(root: &Path, source: &Source) -> Result<engine::Planned> {
     plan_install(root, source, &[], None)
 }
-/// The plan of `install [--module <id>]... [--profile <P>]`: `setup-core`, every
+/// The plan of `install [--module <id>]... [--profile <P>]`: every
 /// module the installed lock records and the `requested` ids are reconciled; an
 /// unknown id is refused by name before anything is read (SPEC-engine.md,
 /// Commands). `tier` installs the requested modules for that maturity profile,
@@ -421,13 +301,8 @@ pub fn plan_lines(planned: &engine::Planned, apply_changes: bool) -> Vec<String>
     lines.extend(planned.plan_notes.iter().map(ToString::to_string));
     lines
 }
-/// A path today's content may have recorded in a schema-1 lock: `setup-core`'s,
-/// a retired guide or the hook `merge-guard` took over.
+/// A path today's content may have recorded in a schema-1 lock: the hook `merge-guard` took over.
 fn known_path(path: &str) -> bool {
-    #[cfg(feature = "setup-core")]
-    if expected_paths().iter().any(|p| p == path) || RETIRED.contains(&path) {
-        return true;
-    }
     HOOKS.iter().any(|(n, _)| *n == path)
 }
 
@@ -607,27 +482,11 @@ pub fn diagnose_with(
     if profile.value["commands"]["verify"].is_null() {
         issues.push("Verification command missing".to_owned());
     }
-    #[cfg(feature = "setup-core")]
-    let conventions = conventions::parse(&profile.value["conventions"]);
-    #[cfg(feature = "setup-core")]
-    {
-        for c in &conventions {
-            if read(root, &c.path)?.is_none() {
-                issues.push(format!("Convention reference missing: {}", c.path));
-            }
-        }
-        issues.extend(conventions::findings(root, &conventions)?);
-    }
     if profile.value.get("planning").is_some() {
-        // The workflow guide is setup-core's: named only when this build installs it (#1247).
-        let guide = if cfg!(feature = "setup-core") {
-            " (docs/agent-setup/workflow.md)"
-        } else {
-            ""
-        };
-        issues.push(format!(
-            "Obsolete profile field: planning; the workflow is a project convention{guide}, remove the field"
-        ));
+        issues.push(
+            "Obsolete profile field: planning; the workflow is a project convention, remove the field"
+                .to_owned(),
+        );
     }
     let observability = &profile.value["observability"];
     if let Some(alerts) = observability["alerts_dir"].as_str() {
@@ -646,30 +505,10 @@ pub fn diagnose_with(
                 .iter()
                 .map(|(k, v)| (k.clone(), v.digest.clone()))
                 .collect();
-            #[cfg(feature = "setup-core")]
-            let mut expected = expected_paths();
-            #[cfg(not(feature = "setup-core"))]
             let mut expected: Vec<String> = Vec::new();
             // The hook is expected where merge-guard is installed (#696).
             if lock.modules.contains_key(modules::merge_guard::MERGE_GUARD) {
                 expected.extend(HOOKS.iter().map(|(n, _)| (*n).to_owned()));
-            }
-            #[cfg(feature = "setup-core")]
-            {
-                let has_index =
-                    conventions.iter().any(|c| c.object) || files.contains_key(DECISIONS_INDEX);
-                // The index is derived from project decisions; staleness must not reject a decision-only PR.
-                if has_index {
-                    let index = read(root, DECISIONS_INDEX)?;
-                    let expected_index = conventions::decisions_index(root, &conventions)?;
-                    if index.as_deref() != Some(&expected_index)
-                        || files.get(DECISIONS_INDEX).and_then(|d| d.as_deref())
-                            != Some(&digest(&expected_index))
-                    {
-                        issues.push(format!("WARNING: Decisions index stale: {DECISIONS_INDEX}; regenerate with the setup installer"));
-                    }
-                }
-                expected.retain(|name| name != DECISIONS_INDEX);
             }
             expected.sort();
             for name in expected.iter().filter(|n| !files.contains_key(*n)) {
@@ -677,17 +516,11 @@ pub fn diagnose_with(
                     "Engineering guide not installed; update setup: {name}"
                 ));
             }
-            #[cfg(feature = "setup-core")]
-            for name in RETIRED.iter().filter(|n| files.contains_key(**n)) {
-                issues.push(format!(
-                    "Retired guide still installed; update setup: {name}"
-                ));
-            }
             if lock.source_dirty {
                 issues.push("Installed source was uncommitted; not a release baseline".to_owned());
             }
             for (name, expected) in &files {
-                if is_decisions_index(name) || expected.is_none() {
+                if expected.is_none() {
                     continue;
                 }
                 let value = read(root, name)?;
@@ -720,7 +553,6 @@ pub fn diagnose_with(
             // own rule judges its date (`agents.technical-debt`, #1172).
             for name in files.keys().filter(|n| {
                 n.starts_with("docs/agent-setup/")
-                    && !is_decisions_index(n)
                     && lock.files[*n].class != engine::Ownership::Seed
             }) {
                 let Some(text) = read(root, name)? else {
@@ -735,14 +567,6 @@ pub fn diagnose_with(
                             issues.push(format!("Guide not verified for {age} days: {label}"));
                         }
                     }
-                }
-            }
-            #[cfg(feature = "setup-core")]
-            for (name, expected) in modules::setup_core::managed_blocks(&profile) {
-                if block_content(read(root, &name)?.as_deref().unwrap_or(""))? != Some(&expected) {
-                    issues.push(format!(
-                        "Entrypoint does not reflect project profile: {name}"
-                    ));
                 }
             }
             let active: Vec<&dyn engine::Module> = modules

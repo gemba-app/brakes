@@ -1,5 +1,5 @@
 name: Task
-description: One slice of work with its definition of ready and done[[setup-core: (docs/agent-setup/task.md)]].
+description: One slice of work with its definition of ready and done.
 title: "[Task] "
 labels:
   - type:task
@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Fill in what is known before work starts. Branch, changes, checks executed and lessons belong to the handoff comment on this issue[[setup-core: (`docs/agent-setup/task.md`)]], not to this form.
+        Fill in what is known before work starts. Branch, changes, checks executed and lessons belong to the handoff comment on this issue, not to this form.
   - type: textarea
     id: outcome
     attributes:

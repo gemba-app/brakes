@@ -75,21 +75,6 @@ pub const CRITICALITY_DECLARED: Rule = Rule {
     evaluate: criticality_declared,
 };
 
-#[cfg(feature = "setup-core")]
-pub const SETUP_INSTALLED: Rule = Rule {
-    id: "baseline.setup-installed",
-    title: "Setup installed",
-    block: Block::Baseline,
-    checks: "`.agent-setup/lock.json` records the installed setup; without it the rule is not required.",
-    how: Probe::Lock,
-    level: Level::Basic,
-    required: ALL,
-    remediation: Remediation::Module { id: "setup-core" },
-    plan: None,
-    feasible_by: Milestone::Nov7,
-    evaluate: setup_installed,
-};
-
 /// The profile as a JSON object, or the failed outcome that says why not.
 fn profile(cx: &Cx<'_>) -> Result<Map<String, Value>, Outcome> {
     json_object(cx, PROFILE)?.ok_or_else(|| Outcome::failed([format!("{PROFILE} missing")]))
@@ -164,15 +149,6 @@ fn criticality_declared(cx: &Cx<'_>) -> Outcome {
     }
 }
 
-#[cfg(feature = "setup-core")]
-fn setup_installed(cx: &Cx<'_>) -> Outcome {
-    match json_object(cx, LOCK) {
-        Ok(Some(_)) => Outcome::passed([format!("{LOCK} present")]),
-        Ok(None) => Outcome::not_required("setup not installed"),
-        Err(outcome) => outcome,
-    }
-}
-
 // --- today's doctor findings (#730) ---------------------------------------------------
 
 /// Which rule a finding is: a rule of the registry, or the module rule id the
@@ -207,32 +183,7 @@ pub static FINDINGS: &[(&str, Relabel)] = &[
         "Verification command missing",
         Relabel::Rule("baseline.verify-declared"),
     ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Setup lock missing",
-        Relabel::Rule("baseline.setup-installed"),
-    ),
     // The conventions and the profile's fields.
-    #[cfg(feature = "setup-core")]
-    (
-        "Convention reference missing: *",
-        Relabel::Rule(CONVENTIONS_RESOLVED.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Convention without a decision: *",
-        Relabel::Rule(CONVENTIONS_RESOLVED.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Convention decision does not resolve: *",
-        Relabel::Rule(CONVENTIONS_RESOLVED.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Convention points at a * decision: *",
-        Relabel::Rule(CONVENTIONS_RESOLVED.id),
-    ),
     (
         "Obsolete profile field: *",
         Relabel::Rule(PROFILE_CURRENT.id),
@@ -255,21 +206,6 @@ pub static FINDINGS: &[(&str, Relabel)] = &[
         Relabel::Rule("operations.runbook-per-alert"),
     ),
     // The installed setup, checked against the lock.
-    #[cfg(feature = "setup-core")]
-    (
-        "WARNING: Decisions index stale: *",
-        Relabel::Rule(DECISIONS_INDEX_CURRENT.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Engineering guide not installed; update setup: *",
-        Relabel::Rule(GUIDES_INSTALLED.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Retired guide still installed; update setup: *",
-        Relabel::Rule(GUIDES_INSTALLED.id),
-    ),
     (
         "Installed source was uncommitted; not a release baseline",
         Relabel::Rule(RELEASE_BASELINE.id),
@@ -281,21 +217,6 @@ pub static FINDINGS: &[(&str, Relabel)] = &[
     (
         "Managed entries drift: *",
         Relabel::Rule(MANAGED_CONTENT_INTACT.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Guide verification date missing: *",
-        Relabel::Rule(GUIDES_VERIFIED.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Guide not verified for * days: *",
-        Relabel::Rule(GUIDES_VERIFIED.id),
-    ),
-    #[cfg(feature = "setup-core")]
-    (
-        "Entrypoint does not reflect project profile: *",
-        Relabel::Rule(ENTRYPOINTS_CURRENT.id),
     ),
     // agent-guardrails' registrations and baked command (#873, point 3).
     (
@@ -311,11 +232,6 @@ pub static FINDINGS: &[(&str, Relabel)] = &[
         Relabel::Rule("agents.stop-verify"),
     ),
     // The checkout, managed or not.
-    #[cfg(feature = "setup-core")]
-    (
-        "Existing placeholder guidance needs review: *",
-        Relabel::Rule(PLACEHOLDERS_REVIEWED.id),
-    ),
     (
         "WARNING: Merge guard hook is not registered in *",
         Relabel::Rule(MERGE_GUARD_REGISTERED.id),
@@ -554,15 +470,6 @@ pub fn relabelled(cx: &Cx<'_>, id: &str, origin: Origin) -> Outcome {
     }
 }
 
-#[cfg(feature = "setup-core")]
-const SETUP_CORE: Remediation = Remediation::Module { id: "setup-core" };
-
-/// `baseline.managed-content-intact`'s remediation: re-running setup-core's
-/// install with the feature, else restoring the file, since no module named
-/// `setup-core` exists in that build.
-#[cfg(feature = "setup-core")]
-const MANAGED_REMEDIATION: Remediation = SETUP_CORE;
-#[cfg(not(feature = "setup-core"))]
 const MANAGED_REMEDIATION: Remediation = RESTORE_MANAGED;
 /// The fix for a drifted file whose module this build does not compile (#1254).
 const RESTORE_MANAGED: Remediation = Remediation::Manual {
@@ -570,11 +477,6 @@ const RESTORE_MANAGED: Remediation = Remediation::Manual {
     instructions: "Undo the hand edit of each managed file doctor names, or re-run install; change a managed file through its module's answers.",
 };
 
-/// `baseline.release-baseline`'s remediation: setup-core's reinstall with the
-/// feature; without it, re-running install from a committed source (#1260).
-#[cfg(feature = "setup-core")]
-const RELEASE_REMEDIATION: Remediation = SETUP_CORE;
-#[cfg(not(feature = "setup-core"))]
 const RELEASE_REMEDIATION: Remediation = Remediation::Manual {
     step: "reinstall-from-committed-source",
     instructions: "Re-run install with a binary built from a committed source (a tagged release or a clean checkout), not from a checkout with local changes.",
@@ -605,20 +507,6 @@ const fn finding_rule(
     }
 }
 
-#[cfg(feature = "setup-core")]
-pub const CONVENTIONS_RESOLVED: Rule = finding_rule(
-    "baseline.conventions-resolved",
-    "Conventions resolve",
-    "Every `conventions` entry of `.agent-setup/project.json` names an existing file and a decision that resolves and is open.",
-    Probe::LocalFile { path: PROFILE },
-    Level::Basic,
-    Remediation::Manual {
-        step: "resolve-conventions",
-        instructions: "Point each convention doctor names at an existing file and an accepted decision.",
-    },
-    |cx| relabelled(cx, CONVENTIONS_RESOLVED.id, Origin::Checkout),
-);
-
 pub const PROFILE_CURRENT: Rule = finding_rule(
     "baseline.profile-current",
     "Profile without obsolete fields",
@@ -632,20 +520,6 @@ pub const PROFILE_CURRENT: Rule = finding_rule(
     |cx| relabelled(cx, PROFILE_CURRENT.id, Origin::Checkout),
 );
 
-#[cfg(feature = "setup-core")]
-pub const PLACEHOLDERS_REVIEWED: Rule = finding_rule(
-    "baseline.placeholder-guidance-reviewed",
-    "No placeholder guidance",
-    "`AGENTS.md` and `CLAUDE.md` carry no placeholder line (TODO, TBD).",
-    Probe::LocalFile { path: "AGENTS.md" },
-    Level::Basic,
-    Remediation::Manual {
-        step: "review-placeholders",
-        instructions: "Replace the placeholder lines of AGENTS.md and CLAUDE.md with real guidance.",
-    },
-    |cx| relabelled(cx, PLACEHOLDERS_REVIEWED.id, Origin::Checkout),
-);
-
 pub const MERGE_GUARD_REGISTERED: Rule = finding_rule(
     "baseline.merge-guard-registered",
     "Merge guard hook registered",
@@ -656,17 +530,6 @@ pub const MERGE_GUARD_REGISTERED: Rule = finding_rule(
     Level::Bronze,
     Remediation::Module { id: "merge-guard" },
     |cx| relabelled(cx, MERGE_GUARD_REGISTERED.id, Origin::Checkout),
-);
-
-#[cfg(feature = "setup-core")]
-pub const GUIDES_INSTALLED: Rule = finding_rule(
-    "baseline.guides-installed",
-    "Guides installed",
-    "The lock records every current engineering guide and no retired one; without a lock it is not required.",
-    Probe::Lock,
-    Level::Basic,
-    SETUP_CORE,
-    |cx| relabelled(cx, GUIDES_INSTALLED.id, Origin::Managed),
 );
 
 pub const RELEASE_BASELINE: Rule = finding_rule(
@@ -718,39 +581,6 @@ fn managed_content_intact(cx: &Cx<'_>) -> Outcome {
     outcome
 }
 
-#[cfg(feature = "setup-core")]
-pub const GUIDES_VERIFIED: Rule = finding_rule(
-    "baseline.guides-verified",
-    "Guides verified recently",
-    "Every installed guide carries a `Last verified` date within the profile's bound; without a lock it is not required.",
-    Probe::Lock,
-    Level::Basic,
-    SETUP_CORE,
-    |cx| relabelled(cx, GUIDES_VERIFIED.id, Origin::Managed),
-);
-
-#[cfg(feature = "setup-core")]
-pub const ENTRYPOINTS_CURRENT: Rule = finding_rule(
-    "baseline.entrypoints-current",
-    "Entrypoints reflect the profile",
-    "The managed blocks of the entrypoints match `.agent-setup/project.json`; without a lock it is not required.",
-    Probe::Lock,
-    Level::Basic,
-    SETUP_CORE,
-    |cx| relabelled(cx, ENTRYPOINTS_CURRENT.id, Origin::Managed),
-);
-
-#[cfg(feature = "setup-core")]
-pub const DECISIONS_INDEX_CURRENT: Rule = finding_rule(
-    "baseline.decisions-index-current",
-    "Decisions index current",
-    "The generated decisions index matches the project's decisions; without a lock it is not required.",
-    Probe::Lock,
-    Level::Bronze,
-    SETUP_CORE,
-    |cx| relabelled(cx, DECISIONS_INDEX_CURRENT.id, Origin::Managed),
-);
-
 pub const REMOTE_READABLE: Rule = finding_rule(
     "baseline.remote-readable",
     "Remote diagnosis readable",
@@ -798,8 +628,6 @@ pub const CI_POLICY_MET: Rule = finding_rule(
 /// point 6, #873): the lowest level of the rules the module serves. Its manual
 /// steps take it but never below Bronze ([`step_level`]).
 pub const MODULE_LEVELS: &[(&str, Level)] = &[
-    #[cfg(feature = "setup-core")]
-    ("setup-core", Level::Basic),
     ("repo-baseline", Level::Basic),
     ("merge-guard", Level::Bronze),
     ("stack-packs", Level::Basic),

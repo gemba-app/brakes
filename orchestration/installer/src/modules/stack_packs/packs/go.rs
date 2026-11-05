@@ -7,7 +7,7 @@ use crate::Result;
 use super::{
     super::{
         App, ContainerSupport, Evidence, Healthcheck, Lockfile, OtelKind, OtelRecipe, PinTable,
-        ProposedCommands, Runtime, StackId, StackPack, Step, TestRunnerProfile, setup_core_guide,
+        ProposedCommands, Runtime, StackId, StackPack, Step, TestRunnerProfile,
     },
     OTEL_ENV, cache_key, cache_pair, run_in,
 };
@@ -51,7 +51,6 @@ pub const GO: StackPack = StackPack {
         ],
         entrypoint_hint: "",
         env: OTEL_ENV,
-        guide: setup_core_guide("docs/agent-setup/observability.md#go"),
     }),
     coverage: None,
     no_coverage: Some(

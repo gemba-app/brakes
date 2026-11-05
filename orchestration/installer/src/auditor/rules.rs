@@ -279,24 +279,10 @@ pub static REGISTRY: &[Rule] = &[
     baseline::PURPOSE_DECLARED,
     baseline::VERIFY_DECLARED,
     baseline::CRITICALITY_DECLARED,
-    #[cfg(feature = "setup-core")]
-    baseline::SETUP_INSTALLED,
-    #[cfg(feature = "setup-core")]
-    baseline::CONVENTIONS_RESOLVED,
     baseline::PROFILE_CURRENT,
-    #[cfg(feature = "setup-core")]
-    baseline::PLACEHOLDERS_REVIEWED,
     baseline::MERGE_GUARD_REGISTERED,
-    #[cfg(feature = "setup-core")]
-    baseline::GUIDES_INSTALLED,
     baseline::RELEASE_BASELINE,
     baseline::MANAGED_CONTENT_INTACT,
-    #[cfg(feature = "setup-core")]
-    baseline::GUIDES_VERIFIED,
-    #[cfg(feature = "setup-core")]
-    baseline::ENTRYPOINTS_CURRENT,
-    #[cfg(feature = "setup-core")]
-    baseline::DECISIONS_INDEX_CURRENT,
     baseline::REMOTE_READABLE,
     baseline::BRANCH_PROTECTION_MATCHES,
     baseline::CI_POLICY_MET,

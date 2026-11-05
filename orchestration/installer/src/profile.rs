@@ -1,5 +1,3 @@
-#[cfg(feature = "setup-core")]
-use crate::conventions;
 use crate::{
     PROFILE, Result,
     auditor::rules::{Criticality, Level},
@@ -158,8 +156,6 @@ pub fn profile_from(root: &Path, raw: Option<String>) -> Result<Profile> {
         }
         destination(root, path.as_str().expect("manifest path"))?;
     }
-    #[cfg(feature = "setup-core")]
-    conventions::validate(root, &value["conventions"])?;
     let acceptance = &value["acceptance"];
     if !acceptance.is_null() {
         if !acceptance.is_object() {
