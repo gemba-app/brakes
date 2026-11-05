@@ -80,6 +80,23 @@ pub fn personal_scope(root: &Path, new_personal: bool) -> Result<PathBuf> {
     personal_scope_in(crate::config::current()?, root, new_personal)
 }
 
+/// Whether `root` and the checkout at `ancestor` share one git directory: a linked
+/// worktree created inside its main checkout is that repository, not a nested one (#59).
+/// Any doubt is "different", so the refusal stands.
+fn same_repository(root: &Path, ancestor: &Path) -> bool {
+    let common = |dir: &Path| {
+        let out = git(dir, &["rev-parse", "--git-common-dir"]).ok()?;
+        let path = Path::new(&out);
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            dir.join(path)
+        };
+        path.canonicalize().ok()
+    };
+    matches!((common(root), common(ancestor)), (Some(a), Some(b)) if a == b)
+}
+
 /// `personal_scope` under an explicit configuration.
 pub fn personal_scope_in(config: &Config, root: &Path, new_personal: bool) -> Result<PathBuf> {
     if config.owner().is_empty() && config.write_allowlist.is_empty() {
@@ -101,7 +118,7 @@ pub fn personal_scope_in(config: &Config, root: &Path, new_personal: bool) -> Re
         return refuse("Target must be the Git repository root");
     }
     for ancestor in root.ancestors().skip(1) {
-        if ancestor.join(".git").exists() {
+        if ancestor.join(".git").exists() && !same_repository(&root, ancestor) {
             return refuse(format!("Nested repository refused: {}", ancestor.display()));
         }
     }
