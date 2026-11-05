@@ -31,6 +31,9 @@ command, never calls the network during a local plan, never writes outside the
 repository root or follows a symbolic link out of it, and writes at most one repository
 per invocation. Writes are refused unless the configuration allows the repository
 (below); there is no fleet-wide write and no change to home-level settings.
+A checkout inside another is refused as a nested repository unless both share one git directory
+(`git rev-parse --git-common-dir`): a linked worktree created inside its main checkout, such as an
+agent worktree under `.claude/worktrees/`, is that repository (#59).
 A plan runs under the read scope and `--apply` under the write scope, which names the
 repository by its GitHub remotes. When the write scope would refuse, the plan of
 `install`, `configure`, `remove` and `ci init` ends with `APPLY REFUSED: <reason>`, the
