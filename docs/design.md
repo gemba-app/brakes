@@ -784,6 +784,12 @@ id equal to a built-in (`scope`, `checks`, `lint`, `shard`, `workflow-lint`, `ma
 plan time naming the modules; the plan prints `NOTE [ci-baseline] JOB [<module>] <id> →
 <workflow path>` per inserted job.
 
+**The audit reads the mode as the plan does (#65).** With an answers file that leaves `workflow`
+unanswered, the auditor reads `seed` unless the installed lock records a workflow this module
+generated (`managed` `ci.yml` or `agentic-ci.yml`), then `generate`, as `model::workflow_mode`
+does, locally and through the contents API. A repository with no answers file keeps the
+defaults of an unmanaged one (`generate`); changing that default needs its own decision.
+
 **Rules.** The static `ci.*` rules (`command-missing`, `aggregate-present`,
 `job-timeouts`, `permissions-least`, `workflow-lint`, `no-self-hosted-label`,
 `hosted-macos`, `dependabot-actions`, `project-ci-stale`, and `posture.actions-pinned`)
