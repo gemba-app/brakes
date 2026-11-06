@@ -143,6 +143,32 @@ pub fn environment(answers: &Answers) -> Result<Option<&str>> {
     Ok(Some(name))
 }
 
+/// The bots allowed past the actor check, comma-separated: Dependabot, and the agents'
+/// App (`<slug>[bot]`) when `agent_app_slug` is answered, so a pull request an agent
+/// opens needs no close and reopen by a person (decision of 2026-11-06). The slug is
+/// written into a workflow, so only GitHub's own slug characters pass: lower-case
+/// letters, digits and inner hyphens, at most 39.
+pub fn allowed_bots(answers: &Answers) -> Result<String> {
+    let Some(slug) = answers.get(super::identity::SLUG).and_then(Value::as_str) else {
+        return Ok(DEPENDABOT.to_owned());
+    };
+    let plain = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
+    if slug.is_empty()
+        || slug.len() > MAX_APP_SLUG
+        || !slug.chars().all(plain)
+        || slug.starts_with('-')
+        || slug.ends_with('-')
+    {
+        return refuse(format!(
+            "Module {AGENT_GUARDRAILS}: agent_app_slug `{slug}` must be 1 to {MAX_APP_SLUG} lower-case letters, digits and inner hyphens"
+        ));
+    }
+    Ok(format!("{DEPENDABOT},{slug}[bot]"))
+}
+
+/// GitHub's limit for an App's slug.
+const MAX_APP_SLUG: usize = 39;
+
 /// The facts the render reads, all confirmed.
 pub struct Confirmed {
     pub secret_input: &'static str,
@@ -198,14 +224,14 @@ fn indent(text: &str, n: usize) -> String {
 /// The `with:` inputs of the Codex reviewer's step, at the indentation of the job
 /// body: Codex runs as the model's user through the action's `unprivileged-user`
 /// strategy, on that user's copy (#971), its key a dummy (#1095).
-fn codex_inputs(facts: &Confirmed, prompt: &str, pins: &PinTable) -> Result<String> {
+fn codex_inputs(facts: &Confirmed, prompt: &str, bots: &str, pins: &PinTable) -> Result<String> {
     let lines = [
         // The action's proxy holds a dummy key; its upstream is the runner's
         // filtering proxy, which holds the real one (#1095).
         format!("      {}: {MODEL_DUMMY_TOKEN}", facts.secret_input),
         "      responses-api-endpoint: \"http://127.0.0.1:${{ env.MODEL_PROXY_PORT }}/v1/responses\""
             .to_owned(),
-        format!("      {}: \"{DEPENDABOT}\"", facts.bot_allowlist),
+        format!("      {}: \"{bots}\"", facts.bot_allowlist),
         format!("      codex-version: \"{}\"", pins.tool("codex")?.version),
         "      permission-profile: \":read-only\"".to_owned(),
         "      safety-strategy: unprivileged-user".to_owned(),
@@ -481,6 +507,7 @@ pub fn jobs(
     blocking: &str,
     runner: &str,
     environment: Option<&str>,
+    bots: &str,
     pins: &PinTable,
 ) -> Result<Vec<CiJob>> {
     let facts = confirmed(reviewer)?;
@@ -492,7 +519,7 @@ pub fn jobs(
     let prompt = render(PROMPT, &[("blocking", &blocking.replace(' ', " or "))]);
     let condition = "    if: github.event_name == 'pull_request'\n";
     let (probe, prepare, review) = if reviewer.family == "codex" {
-        let with = codex_inputs(&facts, &prompt, pins)?;
+        let with = codex_inputs(&facts, &prompt, bots, pins)?;
         let review = format!(
             "  - id: review\n    name: Review with {}\n    if: github.event_name == 'pull_request'\n    uses: {}\n    with:\n{with}",
             reviewer.family,
@@ -502,7 +529,7 @@ pub fn jobs(
         (Some("/v1/responses"), prepare, review)
     } else if reviewer.family == "deepseek" {
         let prepare = [
-            claude_actor_check(DEPENDABOT, 2, condition),
+            claude_actor_check(bots, 2, condition),
             opencode_install(pins, 2, condition)?,
             ripgrep_install(pins, 2, condition)?,
             model_proxy(
@@ -521,7 +548,7 @@ pub fn jobs(
         )
     } else {
         let prepare = [
-            claude_actor_check(DEPENDABOT, 2, condition),
+            claude_actor_check(bots, 2, condition),
             bwrap_prepare(2, condition),
             claude_install(pins, 2, condition)?,
             model_proxy(
@@ -603,6 +630,7 @@ pub fn contributed(cx: &Context<'_>) -> Result<Vec<CiJob>> {
         blocking(cx.answers),
         answered_runner(cx)?,
         environment(cx.answers)?,
+        &allowed_bots(cx.answers)?,
         &pins,
     )
 }

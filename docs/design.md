@@ -781,7 +781,8 @@ is `none`: the other model family's review in two jobs, the model with `contents
 alone emitting its verdict as a job output and the gate with `pull-requests: write`
 alone running no model, both running their steps on pull requests only and the gate
 deciding with its exit code, inside the one aggregate rather than as a check of its
-own; see `docs/decisions.md`, CI hardening). `ci-baseline` registers last so it sees every contributor. A contributed
+own; see `docs/decisions.md`, CI hardening; the actor check lets Dependabot past and, when
+`agent_app_slug` is answered, that App's bot, comma-separated in `ALLOWED_BOT`, #91). `ci-baseline` registers last so it sees every contributor. A contributed
 id equal to a built-in (`scope`, `checks`, `lint`, `shard`, `workflow-lint`, `macos`,
 `required`, `agentic-required`), to another contributor's or not kebab-case refuses at
 plan time naming the modules; the plan prints `NOTE [ci-baseline] JOB [<module>] <id> →

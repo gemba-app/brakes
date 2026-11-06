@@ -4,6 +4,31 @@ These are the decisions the design of `brakes` depends on. They were taken durin
 earlier development, imported into this repository and rewritten in neutral terms; each keeps
 its original date and is marked "imported". Newer decisions are added above them, newest first.
 
+## The agents' App may start the cross-family review — 2026-11-06
+
+Context (#91): a pull request an agent opens through the agents' GitHub App runs CI with the
+App's bot as actor. `actor-check.sh` let only Dependabot (decision of #957) and people with
+write access past, so `cross-review-model` failed with `<app>[bot] is a Bot, not a person` and
+`agentic-required` with it. A person then ran `gh pr close && gh pr reopen` so that they became the
+actor; a `gh pr update-branch` with the bot token undid it. Sessions of two projects showed it on
+three pull requests, each time a stop that checked nothing about the change.
+
+1. **The bot of the answered App is allowed beside Dependabot.** When `agent_app_slug` is
+   answered, the allowed bots are `dependabot[bot],<slug>[bot]`, in all three reviewers (the codex
+   action's `allow-bot-users`, the `ALLOWED_BOT` of the actor check for claude and deepseek).
+   Unanswered, only Dependabot, and the rendered files do not change.
+2. **Nothing else widens.** One App, named, never a wildcard or a list the project types: the
+   slug is the one the project already gave for the `app-installed` probe. The reviewer still gets
+   the pull request read-only, with the model's secret out of its reach and its verdict
+   gated by `cross-review`. A fork is still refused first. Any other bot, and any person without
+   write access, is still refused.
+3. **The slug is written into a workflow, so it is validated:** 1 to 39 lower-case letters,
+   digits and inner hyphens (GitHub's own slug), otherwise the plan refuses naming the answer.
+4. **What this does not do.** It gives the review no human in the loop for the agents' pull
+   requests: that gesture is what the close and reopen was. The review is a model reading a
+   diff an agent wrote, and its findings still fail the check at `review_blocking`. A project
+   that wants the human gesture leaves `agent_app_slug` out.
+
 ## The `setup-core` cargo feature is removed — 2026-11-05
 
 Context (#60): the product-boundary decision (point 2) left the former core module compiled
