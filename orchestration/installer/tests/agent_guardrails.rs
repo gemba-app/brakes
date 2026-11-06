@@ -3308,6 +3308,34 @@ fn dependabot_is_the_one_bot_allowed_and_forks_fail_closed() {
 }
 
 #[test]
+fn the_agents_app_bot_is_allowed_beside_dependabot_when_its_slug_is_answered() {
+    let both = "dependabot[bot],example-agents[bot]";
+    for family in ["codex", "claude", "deepseek"] {
+        let f = reviewed(json!({"review_family": family, "agent_app_slug": "example-agents"}));
+        let text = workflow_of(&plan_composed(&f, true).unwrap(), CI_YML);
+        let wf = parsed(&text);
+        let job = wf.job(CROSS_REVIEW_MODEL).unwrap();
+        let listed = job
+            .steps
+            .iter()
+            .find_map(|s| s.env.get("ALLOWED_BOT").or(s.with.get("allow-bot-users")))
+            .unwrap_or_else(|| panic!("{family}: no bot list"));
+        assert_eq!(listed, both, "{family}");
+    }
+}
+
+#[test]
+fn an_agent_app_slug_outside_githubs_slug_characters_refuses() {
+    for slug in [
+        "Example", "ex ample", "a,b", "a[bot]", "-lead", "x\"y", "a\nb",
+    ] {
+        let f = reviewed(json!({"agent_app_slug": slug}));
+        let error = plan_composed(&f, true).expect_err(slug).to_string();
+        assert!(error.contains("agent_app_slug"), "{slug}: {error}");
+    }
+}
+
+#[test]
 fn vendor_facts_are_dated_sourced_and_pinned() {
     let pins = PinTable::embedded().unwrap();
     assert_eq!(REVIEWERS.len(), 3);
@@ -3370,7 +3398,7 @@ fn a_recorded_extra_read_scope_reaches_the_model_job_as_a_read() {
         ..CLAUDE
     };
     let pins = PinTable::embedded().unwrap();
-    let jobs = review::jobs(&needy, "P0", "ubuntu-24.04", None, &pins).unwrap();
+    let jobs = review::jobs(&needy, "P0", "ubuntu-24.04", None, "dependabot[bot]", &pins).unwrap();
     assert_eq!(jobs[0].id, CROSS_REVIEW_MODEL);
     assert!(
         jobs[0]
@@ -3404,9 +3432,16 @@ fn an_unconfirmed_vendor_fact_refuses_at_render_time() {
     };
     let pins = PinTable::embedded().unwrap();
     assert_eq!(
-        review::jobs(&guessed, "P0 P1", "ubuntu-24.04", None, &pins)
-            .unwrap_err()
-            .to_string(),
+        review::jobs(
+            &guessed,
+            "P0 P1",
+            "ubuntu-24.04",
+            None,
+            "dependabot[bot]",
+            &pins
+        )
+        .unwrap_err()
+        .to_string(),
         "Module agent-guardrails: reviewer codex: fails_on_findings is not confirmed in the vendor facts; verify it against the vendor's documentation before rendering cross-review"
     );
     let guessed = Reviewer {
@@ -3414,10 +3449,17 @@ fn an_unconfirmed_vendor_fact_refuses_at_render_time() {
         ..CLAUDE
     };
     assert!(
-        review::jobs(&guessed, "P0", "ubuntu-24.04", None, &pins)
-            .unwrap_err()
-            .to_string()
-            .contains("secret_input is not confirmed")
+        review::jobs(
+            &guessed,
+            "P0",
+            "ubuntu-24.04",
+            None,
+            "dependabot[bot]",
+            &pins
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("secret_input is not confirmed")
     );
 }
 
