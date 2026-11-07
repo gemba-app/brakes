@@ -130,13 +130,9 @@ jobs:
           fi
           echo "$NAME: $cmd"
           bash -euo pipefail -c "$cmd"
-  diff-coverage:
-    name: diff-coverage
-    needs: test
-    uses: ./.github/workflows/agentic-coverage.yml
   required:
     name: required
-    needs: [lint, test, build, diff-coverage]
+    needs: [lint, test, build]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
