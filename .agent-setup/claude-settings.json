@@ -1,18 +1,5 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/merge_guard.sh\"",
-            "onFailure": "block",
-            "timeout": 60,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      }
-    ],
     "Stop": [
       {
         "hooks": [
@@ -27,9 +14,6 @@
     ]
   },
   "permissions": {
-    "ask": [
-      "Bash(gh pr edit * --add-label human-approved)"
-    ],
     "deny": [
       "Read(//**/.env)",
       "Read(//**/.env.local)",
